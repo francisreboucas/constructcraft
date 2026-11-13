@@ -551,6 +551,7 @@ impl Command for ProfileCatalog {
                     json!({
                         "code": s.code,
                         "name": series_name(s),
+                        "library": s.library.code(),
                         "material": s.material.code(),
                         "shape": s.shape,
                         "count": s.rows.len(),

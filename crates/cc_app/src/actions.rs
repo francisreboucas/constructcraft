@@ -950,7 +950,55 @@ pub fn export_analytical(state: &mut AppState) {
     }
 }
 
-/// X bracing between the two selected columns.
+/// Start the interactive steel connection tool (or open the configuration dialog
+/// right away when structural members are already selected).
+pub fn start_steel_connection(state: &mut AppState) {
+    let project = state.project();
+    let members: Vec<cc_core::ElementId> = state
+        .selection
+        .iter()
+        .copied()
+        .filter(|id| project.element(*id).is_some_and(|e| matches!(e.category(), Category::Beam | Category::Column)))
+        .collect();
+    if members.len() >= 2
+        || (members.len() == 1 && project.element(members[0]).is_some_and(|e| e.category() == Category::Column))
+    {
+        crate::steel_connection_dialog::open(state, members);
+    } else {
+        state.set_tool(Tool::SteelConnection);
+        state.interaction.targets.clear();
+        state.message = t!("hint-steel-conn-first");
+    }
+}
+
+/// Automatically recognize and place typical steel connections on the selected
+/// structural members, or across the active level.
+pub fn steel_connections(state: &mut AppState) {
+    let project = state.project();
+    let elements: Vec<u64> = state
+        .selection
+        .iter()
+        .filter(|id| project.element(**id).is_some_and(|e| matches!(e.category(), Category::Beam | Category::Column)))
+        .map(|id| id.0)
+        .collect();
+    let level = if elements.is_empty() { state.active_level().map(|l| Ref::Id(l.0)) } else { None };
+    let command = cc_engine::commands::steel_connection::SteelConnectionsAuto { elements, level, ..Default::default() };
+    if let Some(out) = run(state, command) {
+        let created: std::collections::BTreeSet<cc_core::ElementId> = out["created"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_u64())
+            .map(cc_core::ElementId)
+            .collect();
+        let count = created.len();
+        let skipped = out["skipped"].as_u64().unwrap_or(0);
+        state.message = t!("msg-steel-connections-placed", "count" => count, "skipped" => skipped);
+        if !created.is_empty() {
+            state.selection = created;
+        }
+    }
+}
 /// Typical reinforcement for the selected beams and columns, or all of the active level.
 pub fn typical_rebar(state: &mut AppState) {
     let project = state.project();

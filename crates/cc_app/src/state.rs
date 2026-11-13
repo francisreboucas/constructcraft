@@ -45,6 +45,7 @@ pub struct Dialogs {
     pub project_info: bool,
     pub units: bool,
     pub material_browser: crate::material_browser::Browser,
+    pub steel_connection: Option<crate::steel_connection_dialog::SteelConnectionDialog>,
     pub levels: bool,
     pub materials: bool,
     pub type_editor: Option<ElementTypeId>,

@@ -177,7 +177,7 @@ fn narrow_ribbon_scrolls() {
     // Wide enough, no arrows.
     let mut state = sample_state();
     state.ribbon_tab = RibbonTab::Structure;
-    let harness = ribbon_harness(state, 1100.0);
+    let harness = ribbon_harness(state, 1280.0);
     assert!(harness.query_by_label(&t!("ribbon-scroll-right")).is_none());
 }
 

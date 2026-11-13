@@ -1075,6 +1075,8 @@ mat-class = 类别
 mat-color = 颜色
 mat-cut-pattern = 截面填充图案
 mat-delete = 删除
+mat-import-brazil = 巴西 (NBR)
+mat-import-brazil-tip = 导入结构钢 (NBR 7007/7008, ASTM)、钢筋 (NBR 7480) 和混凝土 C20–C90 (NBR 6118)
 mat-descriptive = 说明信息
 mat-duplicate = 复制
 mat-finish = 表面处理
@@ -3163,6 +3165,9 @@ profile-series-glulam = 胶合木
 profile-series-shs = 方管 (SHS)
 profile-series-rhs = 矩形管 (RHS)
 profile-series-chs = 圆管 (CHS)
+profile-series-cs = 焊接工字钢 CS (ABNT NBR 5884)
+profile-series-cvs = 焊接工字钢 CVS (ABNT NBR 5884)
+profile-series-br = 圆钢 (BR)
 
 # OBJ import
 action-import-obj = 导入 OBJ…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = 双人床 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = 衣柜 5'-0"
 tpl-imp-type-kitchen-sink = 不锈钢洗涤盆 4'-0"
 tpl-imp-type-floor-drain = 地漏 6"
+tx-create-steel-connection = 创建钢结构节点
+action-steel-connections = 钢结构连接
+cmd-desc-steel-connections = 自动识别钢柱、钢梁、桁架和支撑，并布置典型钢结构连接宏（柱脚底板、端板、单剪板、节点板、拼接）。
+msg-steel-connections-placed = 已创建 { $count } 个钢结构连接（{ $skipped } 个节点已有连接）。
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection

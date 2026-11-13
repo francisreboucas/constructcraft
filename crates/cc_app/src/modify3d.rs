@@ -53,6 +53,7 @@ pub fn works_in_3d(tool: &Tool) -> bool {
             | Tool::Align
             | Tool::PushPull
             | Tool::JoinGeometry { .. }
+            | Tool::SteelConnection
     )
 }
 
@@ -333,6 +334,7 @@ pub fn handle(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState,
         Tool::Align => align(&ctx, state),
         Tool::PushPull => push_pull(&ctx, state),
         Tool::JoinGeometry { unjoin } => join(&ctx, state, unjoin),
+        Tool::SteelConnection => steel_connection(&ctx, state),
         Tool::Move | Tool::Copy | Tool::Array | Tool::Rotate | Tool::Mirror { .. } => {
             let targets: BTreeSet<ElementId> = state.interaction.targets.iter().copied().collect();
             if targets.is_empty() {
@@ -643,6 +645,22 @@ fn join(ctx: &Ctx, state: &mut AppState, unjoin: bool) {
     }
     if ctx.resp.clicked() {
         crate::modify::join_pick(state, hovered, unjoin);
+    }
+}
+
+fn steel_connection(ctx: &Ctx, state: &mut AppState) {
+    let Some(cursor) = ctx.resp.hover_pos() else { return };
+    let hovered = pick_element(state, ctx.view_id, ctx.frame.ray(cursor))
+        .map(|(id, _)| id)
+        .filter(|id| crate::modify::is_steel_member(state, *id));
+    let mut lit: BTreeSet<ElementId> = state.interaction.targets.first().copied().into_iter().collect();
+    lit.extend(hovered);
+    if !lit.is_empty() {
+        let edges = cached_ghost(state, ctx.view_id, &lit);
+        ctx.ghost(&edges, &PlanTransform::IDENTITY);
+    }
+    if ctx.resp.clicked() {
+        crate::modify::steel_connection_pick(state, hovered);
     }
 }
 

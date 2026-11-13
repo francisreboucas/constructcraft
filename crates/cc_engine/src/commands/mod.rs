@@ -54,6 +54,7 @@ pub mod site;
 pub mod sketch;
 pub mod stair;
 pub mod steel_building;
+pub mod steel_connection;
 pub mod structure;
 pub mod structure_material;
 pub mod sweep;

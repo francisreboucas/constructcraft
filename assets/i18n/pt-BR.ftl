@@ -1075,6 +1075,8 @@ mat-class = Classe
 mat-color = Cor
 mat-cut-pattern = Padrão de corte
 mat-delete = Excluir
+mat-import-brazil = Brasil (NBR)
+mat-import-brazil-tip = Importar aços estruturais (NBR 7007/7008, ASTM), armaduras (NBR 7480) e concretos C20–C90 (NBR 6118)
 mat-descriptive = Informações descritivas
 mat-duplicate = Duplicar
 mat-finish = Acabamento
@@ -3163,6 +3165,9 @@ profile-series-glulam = Madeira laminada colada (MLC)
 profile-series-shs = Tubos quadrados (SHS)
 profile-series-rhs = Tubos retangulares (RHS)
 profile-series-chs = Tubos circulares (CHS)
+profile-series-cs = Perfil I soldado CS (ABNT NBR 5884)
+profile-series-cvs = Perfil I soldado CVS (ABNT NBR 5884)
+profile-series-br = Barras redondas de aço (BR)
 
 # OBJ import
 action-import-obj = Importar OBJ…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = Cama casal 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Armário 5'-0"
 tpl-imp-type-kitchen-sink = Pia inox 4'-0"
 tpl-imp-type-floor-drain = Ralo sifonado 6"
+tx-create-steel-connection = Criar ligação metálica
+action-steel-connections = Auto (Reconhecer)
+cmd-desc-steel-connections = Reconhece pilares, vigas, treliças e contraventamentos e aplica macros de ligações metálicas (chapa de base, end plate, single plate, chapa de nó, emenda).
+msg-steel-connections-placed = { $count } ligações metálicas criadas ({ $skipped } nós já possuíam ligação).
+profile-series-u-lam = Perfil U laminado (ABNT NBR)
+profile-series-l-lam = Cantoneira laminada L (ABNT NBR)
+
+group-steel-connections = Ligações Metálicas
+action-steel-connection = Nova Ligação
+cmd-desc-steel-connection = Clique em duas vigas ou pilares (ou em um pilar) para configurar e criar uma ligação metálica.
+tool-steel-connection = Nova Ligação
+hint-steel-conn-first = Clique na primeira viga ou pilar para a ligação metálica
+hint-steel-conn-second = Clique na segunda viga ou pilar para configurar a ligação

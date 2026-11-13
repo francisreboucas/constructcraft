@@ -1075,6 +1075,8 @@ mat-class = クラス
 mat-color = 色
 mat-cut-pattern = 切断面パターン
 mat-delete = 削除
+mat-import-brazil = ブラジル (NBR)
+mat-import-brazil-tip = 構造用鋼 (NBR 7007/7008, ASTM)、鉄筋 (NBR 7480)、コンクリート C20–C90 (NBR 6118) をインポート
 mat-descriptive = 説明情報
 mat-duplicate = 複製
 mat-finish = 仕上げ
@@ -3163,6 +3165,9 @@ profile-series-glulam = 集成材
 profile-series-shs = 正方形鋼管 (SHS)
 profile-series-rhs = 長方形鋼管 (RHS)
 profile-series-chs = 円形鋼管 (CHS)
+profile-series-cs = 溶接H形鋼 CS (ABNT NBR 5884)
+profile-series-cvs = 溶接H形鋼 CVS (ABNT NBR 5884)
+profile-series-br = 丸鋼 (BR)
 
 # OBJ import
 action-import-obj = OBJ をインポート…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = ダブルベッド 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = ワードローブ 5'-0"
 tpl-imp-type-kitchen-sink = ステンレスシンク 4'-0"
 tpl-imp-type-floor-drain = 床排水トラップ 6"
+tx-create-steel-connection = 鉄骨接合部を作成
+action-steel-connections = 鉄骨接合マクロ
+cmd-desc-steel-connections = 柱・梁・トラス・ブレースを自動認識し、標準的な鉄骨接合マクロ（ベースプレート、エンドプレート、ガセットプレート、スプライス）を配置します。
+msg-steel-connections-placed = { $count } 個の鉄骨接合部を作成しました（既存の { $skipped } 箇所はスキップ）。
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection

@@ -237,6 +237,14 @@ fn list(ui: &mut Ui, state: &mut AppState, height: f32) {
             crate::actions::run_command(state, materials::MaterialDelete { material: Ref::Name(name) });
             state.dialogs.material_browser.selected = None;
         }
+        if ui.button(t!("mat-import-brazil")).on_hover_text(t!("mat-import-brazil-tip")).clicked() {
+            let cmd = materials::MaterialLibraryImport { library: Some("brazil".into()), kind: None };
+            if let Some(out) = crate::actions::run_command(state, cmd)
+                && let Some(first) = out["imported"].as_array().and_then(|a| a.first()).and_then(|v| v.as_str())
+            {
+                state.dialogs.material_browser.selected = Some(first.to_string());
+            }
+        }
     });
 }
 

@@ -1056,6 +1056,8 @@ mat-class = Classe
 mat-color = Colore
 mat-cut-pattern = Retino di taglio
 mat-delete = Elimina
+mat-import-brazil = Brasile (NBR)
+mat-import-brazil-tip = Importa acciai strutturali (NBR 7007/7008, ASTM), armature (NBR 7480) e calcestruzzi C20–C90 (NBR 6118)
 mat-descriptive = Informazioni descrittive
 mat-duplicate = Duplica
 mat-finish = Finitura
@@ -3163,6 +3165,9 @@ profile-series-glulam = Legno lamellare incollato
 profile-series-shs = Tubi quadrati (SHS)
 profile-series-rhs = Tubi rettangolari (RHS)
 profile-series-chs = Tubi tondi (CHS)
+profile-series-cs = Profilo I saldato CS (ABNT NBR 5884)
+profile-series-cvs = Profilo I saldato CVS (ABNT NBR 5884)
+profile-series-br = Barre tonde in acciaio (BR)
 
 # OBJ import
 action-import-obj = Importa OBJ…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = Letto matrimoniale 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Armadio 5'-0"
 tpl-imp-type-kitchen-sink = Lavello in acciaio inox 4'-0"
 tpl-imp-type-floor-drain = Pozzetto sifonato 6"
+tx-create-steel-connection = Crea connessione in acciaio
+action-steel-connections = Connessioni Acciaio
+cmd-desc-steel-connections = Riconosce pilastri, travi, capriate e controventi e applica macro di connessioni in acciaio (piastra di base, end plate, single plate, fazzoletto, giunto).
+msg-steel-connections-placed = { $count } connessioni in acciaio create ({ $skipped } nodi avevano già una connessione).
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection

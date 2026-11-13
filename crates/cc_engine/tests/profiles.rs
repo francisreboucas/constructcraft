@@ -837,3 +837,137 @@ fn round_beams_have_their_exact_volume() {
     let volume = s.geometry().volume(id);
     assert!((volume - want).abs() / want < 1e-5, "{volume} vs {want}");
 }
+
+#[test]
+fn brazil_profile_series_and_material_library_import() {
+    let mut s = Session::default();
+    let res = run(&mut s, "material_library_import", json!({"library": "brazil"}));
+    let imported = res["imported"].as_array().unwrap();
+    assert!(imported.len() >= 20, "imported steels, rebars and concretes: {}", imported.len());
+    assert!(s.project().material("Steel MR250 (NBR 7007)").is_some());
+    assert!(s.project().material("Concrete C30 (NBR 6118)").is_some());
+
+    // Calling again keeps existing materials untouched.
+    let res2 = run(&mut s, "material_library_import", json!({"library": "brazil", "kind": "steel"}));
+    assert!(res2["imported"].as_array().unwrap().is_empty());
+    assert!(!res2["kept"].as_array().unwrap().is_empty());
+
+    // Import CS, CVS and BR profiles and create types with MR250 steel.
+    let cs = run(&mut s, "profile_import", json!({"series": "CS", "designations": ["CS 250x43"]}));
+    assert_eq!(cs["imported"].as_array().unwrap().len(), 1);
+    let cvs = run(&mut s, "profile_import", json!({"series": "CVS", "designations": ["CVS 250x40"]}));
+    assert_eq!(cvs["imported"].as_array().unwrap().len(), 1);
+    let br = run(&mut s, "profile_import", json!({"series": "BR", "designations": ["BR 5/8\""]}));
+    assert_eq!(br["imported"].as_array().unwrap().len(), 1);
+
+    let col_ty = run(
+        &mut s,
+        "profile_type_create",
+        json!({"profile": "CS 250x43", "category": "column", "material": "Steel MR250 (NBR 7007)"}),
+    );
+    let col = run(&mut s, "column_create", json!({"type": col_ty["id"], "position": [0.0, 0.0], "height": 4.0}));
+    assert!(s.geometry().volume(ElementId(col["id"].as_u64().unwrap())) > 0.0);
+}
+
+#[test]
+fn steel_connection_macros_create_and_auto_recognize_all_joint_kinds() {
+    let mut s = Session::default();
+    run(&mut s, "profile_import", json!({"series": "CS", "designations": ["CS 250x43"]}));
+    run(&mut s, "profile_import", json!({"series": "CVS", "designations": ["CVS 250x40"]}));
+    let col_ty = run(&mut s, "profile_type_create", json!({"profile": "CS 250x43", "category": "column"}))["id"]
+        .as_u64()
+        .unwrap();
+    let beam_ty = run(&mut s, "profile_type_create", json!({"profile": "CVS 250x40", "category": "beam"}))["id"]
+        .as_u64()
+        .unwrap();
+
+    // 1. Catalog query lists all 6 parametric macros.
+    let catalog = run(&mut s, "steel_connection_macros", json!({}));
+    let macros = catalog["macros"].as_array().unwrap();
+    assert_eq!(macros.len(), 6);
+
+    // 2. Build a portal frame with columns, primary beams, a spliced beam, a secondary beam, X-bracing and a truss.
+    let c1 = run(&mut s, "column_create", json!({"type": col_ty, "position": [0.0, 0.0]}))["id"].as_u64().unwrap();
+    let c2 = run(&mut s, "column_create", json!({"type": col_ty, "position": [0.0, 6.0]}))["id"].as_u64().unwrap();
+    let c3 = run(&mut s, "column_create", json!({"type": col_ty, "position": [6.0, 0.0]}))["id"].as_u64().unwrap();
+
+    // Beam along +Y (flange of column c1 & c2 -> end_plate)
+    let b_frame = run(&mut s, "beam_create", json!({"type": beam_ty, "start": [0.0, 0.0], "end": [0.0, 6.0]}))["id"]
+        .as_u64()
+        .unwrap();
+
+    // Beam along +X into column c1 web -> single_plate, spliced at x = 3.0 -> splice
+    let b_web1 = run(&mut s, "beam_create", json!({"type": beam_ty, "start": [0.0, 0.0], "end": [3.0, 0.0]}))["id"]
+        .as_u64()
+        .unwrap();
+    let b_web2 = run(&mut s, "beam_create", json!({"type": beam_ty, "start": [3.0, 0.0], "end": [6.0, 0.0]}))["id"]
+        .as_u64()
+        .unwrap();
+
+    // Secondary beam framing into b_frame at mid-span (0.0, 3.0)
+    let b_sec = run(&mut s, "beam_create", json!({"type": beam_ty, "start": [0.0, 3.0], "end": [3.0, 3.0]}))["id"]
+        .as_u64()
+        .unwrap();
+
+    // Explicit creation of each macro kind and verification of 3D scripted geometry:
+    let bp = run(
+        &mut s,
+        "steel_connection_create",
+        json!({"elements": [c1], "kind": "base_plate", "base_mode": "fixed", "stiffeners": true, "anchors": 4}),
+    );
+    let bp_id = ElementId(bp["id"].as_u64().unwrap());
+    assert_eq!(bp["kind"], "base_plate");
+    assert!(s.geometry().volume(bp_id) > 0.0, "base_plate should produce 3D solid pieces");
+
+    let ep = run(
+        &mut s,
+        "steel_connection_create",
+        json!({"elements": [c1, b_frame], "kind": "end_plate", "stiffeners": true}),
+    );
+    let ep_id = ElementId(ep["id"].as_u64().unwrap());
+    assert_eq!(ep["kind"], "end_plate");
+    assert!(s.geometry().volume(ep_id) > 0.0, "end_plate should produce 3D solid pieces");
+
+    let sp = run(&mut s, "steel_connection_create", json!({"elements": [c1, b_web1]}));
+    let sp_id = ElementId(sp["id"].as_u64().unwrap());
+    assert_eq!(sp["kind"], "single_plate", "beam into column web auto-detects single_plate");
+    assert!(s.geometry().volume(sp_id) > 0.0, "single_plate should produce 3D solid pieces");
+
+    let da = run(&mut s, "steel_connection_create", json!({"elements": [b_frame, b_sec], "kind": "double_angle"}));
+    let da_id = ElementId(da["id"].as_u64().unwrap());
+    assert_eq!(da["kind"], "double_angle");
+    assert!(s.geometry().volume(da_id) > 0.0, "double_angle should produce 3D solid pieces");
+
+    let spl = run(&mut s, "steel_connection_create", json!({"elements": [b_web1, b_web2]}));
+    let spl_id = ElementId(spl["id"].as_u64().unwrap());
+    assert_eq!(spl["kind"], "splice", "collinear beams auto-detect splice");
+    assert!(s.geometry().volume(spl_id) > 0.0, "splice should produce 3D solid pieces");
+
+    // Add X-bracing between c1 and c2, and a truss, then run steel_connections_auto.
+    let braces = run(&mut s, "braces_between_columns", json!({"columns": [c1, c2], "pattern": "x", "type": beam_ty}));
+    let brace_ids: Vec<u64> = braces["created"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+    let gp = run(&mut s, "steel_connection_create", json!({"elements": brace_ids}));
+    let gp_id = ElementId(gp["id"].as_u64().unwrap());
+    assert_eq!(gp["kind"], "gusset_plate", "crossing braces auto-detect gusset_plate");
+    assert!(s.geometry().volume(gp_id) > 0.0, "gusset_plate should produce 3D solid pieces");
+
+    let _truss = run(
+        &mut s,
+        "truss_create",
+        json!({"start": [0.0, 8.0], "end": [8.0, 8.0], "height": 1.2, "panels": 4, "chord_type": beam_ty}),
+    );
+
+    let auto1 =
+        run(&mut s, "steel_connections_auto", json!({"elements": [c1, c2, c3, b_frame, b_web1, b_web2, b_sec]}));
+    assert!(
+        auto1["created"].as_array().unwrap().len() >= 3,
+        "should place remaining base/end/shear connections: {auto1}"
+    );
+    assert!(auto1["skipped"].as_u64().unwrap() >= 1, "already placed connections are skipped: {auto1}");
+
+    // Second run with the same scope creates 0 duplicates.
+    let auto2 =
+        run(&mut s, "steel_connections_auto", json!({"elements": [c1, c2, c3, b_frame, b_web1, b_web2, b_sec]}));
+    assert_eq!(auto2["created"].as_array().unwrap().len(), 0);
+    assert!(auto2["skipped"].as_u64().unwrap() >= 4);
+}

@@ -1056,6 +1056,8 @@ mat-class = Klasa
 mat-color = Kolor
 mat-cut-pattern = Wzór przekroju
 mat-delete = Usuń
+mat-import-brazil = Brazylia (NBR)
+mat-import-brazil-tip = Importuj stale konstrukcyjne (NBR 7007/7008, ASTM), zbrojenie (NBR 7480) i betony C20–C90 (NBR 6118)
 mat-descriptive = Informacje opisowe
 mat-duplicate = Duplikuj
 mat-finish = Wykończenie
@@ -3163,6 +3165,9 @@ profile-series-glulam = Drewno klejone warstwowo
 profile-series-shs = Rury kwadratowe (SHS)
 profile-series-rhs = Rury prostokątne (RHS)
 profile-series-chs = Rury okrągłe (CHS)
+profile-series-cs = Dwuteownik spawany CS (ABNT NBR 5884)
+profile-series-cvs = Dwuteownik spawany CVS (ABNT NBR 5884)
+profile-series-br = Pręty okrągłe stalowe (BR)
 
 # OBJ import
 action-import-obj = Importuj OBJ…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = Łóżko podwójne 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Szafa 5'-0"
 tpl-imp-type-kitchen-sink = Zlewozmywak stalowy 4'-0"
 tpl-imp-type-floor-drain = Wpust podłogowy 6"
+tx-create-steel-connection = Utwórz połączenie stalowe
+action-steel-connections = Połączenia Stalowe
+cmd-desc-steel-connections = Rozpoznaje słupy, belki, kratownice i stężenia oraz wstawia makra typowych połączeń stalowych (blacha podstawy, blacha czołowa, żebro, blacha węzłowa, styk).
+msg-steel-connections-placed = Utworzone połączenia stalowe: { $count } (węzły z istniejącym połączeniem: { $skipped }).
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection

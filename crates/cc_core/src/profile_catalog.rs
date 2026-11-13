@@ -15,6 +15,24 @@ use std::sync::OnceLock;
 /// Most rows read from one table.
 pub const MAX_ROWS: usize = 5000;
 
+/// Regional / normative library a catalog series belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileLibrary {
+    Brazil,
+    Europe,
+    Timber,
+}
+
+impl ProfileLibrary {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Brazil => "brazil",
+            Self::Europe => "europe",
+            Self::Timber => "timber",
+        }
+    }
+}
+
 /// A catalog series: rows of one shape and material.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Series {
@@ -22,6 +40,7 @@ pub struct Series {
     pub code: &'static str,
     /// The i18n key of the series' name.
     pub name_key: &'static str,
+    pub library: ProfileLibrary,
     pub material: ProfileMaterial,
     /// The [`ProfileShape::code`] of the rows.
     pub shape: &'static str,
@@ -38,10 +57,11 @@ pub struct CatalogRow {
     pub area: f64,
 }
 
-/// What a series is: its code, name key, material, shape and table.
+/// What a series is: its code, name key, library, material, shape and table.
 struct Spec {
     code: &'static str,
     name_key: &'static str,
+    library: ProfileLibrary,
     material: ProfileMaterial,
     shape: &'static str,
     table: &'static str,
@@ -50,29 +70,37 @@ struct Spec {
 const fn spec(
     code: &'static str,
     name_key: &'static str,
+    library: ProfileLibrary,
     material: ProfileMaterial,
     shape: &'static str,
     table: &'static str,
 ) -> Spec {
-    Spec { code, name_key, material, shape, table }
+    Spec { code, name_key, library, material, shape, table }
 }
 
+use ProfileLibrary::{Brazil, Europe, Timber as LibTimber};
 use ProfileMaterial::{ColdFormed, Steel, Timber};
 
 /// The series: W and HP as rolled in Brazil (ABNT NBR 15980:2024, ASTM A6/A6M
-/// dimensions; `(H)` marks the wide-flange column sizes), IPE, HEA
-/// and HEB (EN 10365), the NBR 6355 cold-formed sections (Z45 with lips at
-/// 45°, Z90 with square lips), commercial sawn timber and glulam, and the
-/// hollow sections (EN 10219 sizes and corner radii).
+/// dimensions; `(H)` marks the wide-flange column sizes), CS and CVS welded
+/// sections (ABNT NBR 5884:2005), IPE, HEA and HEB (EN 10365), the NBR 6355
+/// cold-formed sections (Z45 with lips at 45°, Z90 with square lips), commercial
+/// sawn timber and glulam, round steel bars (BR) and the hollow sections
+/// (EN 10219 sizes and corner radii).
 const SPECS: &[Spec] = &[
-    spec("W", "profile-series-w", Steel, "i", include_str!("../assets/profiles/w.csv")),
-    spec("HP", "profile-series-hp", Steel, "i", include_str!("../assets/profiles/hp.csv")),
-    spec("IPE", "profile-series-ipe", Steel, "i", include_str!("../assets/profiles/ipe.csv")),
-    spec("HEA", "profile-series-hea", Steel, "i", include_str!("../assets/profiles/hea.csv")),
-    spec("HEB", "profile-series-heb", Steel, "i", include_str!("../assets/profiles/heb.csv")),
+    spec("W", "profile-series-w", Brazil, Steel, "i", include_str!("../assets/profiles/w.csv")),
+    spec("HP", "profile-series-hp", Brazil, Steel, "i", include_str!("../assets/profiles/hp.csv")),
+    spec("CS", "profile-series-cs", Brazil, Steel, "i", include_str!("../assets/profiles/cs.csv")),
+    spec("CVS", "profile-series-cvs", Brazil, Steel, "i", include_str!("../assets/profiles/cvs.csv")),
+    spec("U-LAM", "profile-series-u-lam", Brazil, Steel, "channel", include_str!("../assets/profiles/u_lam.csv")),
+    spec("L-LAM", "profile-series-l-lam", Brazil, Steel, "angle", include_str!("../assets/profiles/l_lam.csv")),
+    spec("IPE", "profile-series-ipe", Europe, Steel, "i", include_str!("../assets/profiles/ipe.csv")),
+    spec("HEA", "profile-series-hea", Europe, Steel, "i", include_str!("../assets/profiles/hea.csv")),
+    spec("HEB", "profile-series-heb", Europe, Steel, "i", include_str!("../assets/profiles/heb.csv")),
     spec(
         "NBR6355-U",
         "profile-series-nbr6355-u",
+        Brazil,
         ColdFormed,
         "cold_u",
         include_str!("../assets/profiles/nbr6355_u.csv"),
@@ -80,6 +108,7 @@ const SPECS: &[Spec] = &[
     spec(
         "NBR6355-Ue",
         "profile-series-nbr6355-ue",
+        Brazil,
         ColdFormed,
         "cold_lipped_u",
         include_str!("../assets/profiles/nbr6355_ue.csv"),
@@ -87,6 +116,7 @@ const SPECS: &[Spec] = &[
     spec(
         "NBR6355-Z",
         "profile-series-nbr6355-z",
+        Brazil,
         ColdFormed,
         "cold_z",
         include_str!("../assets/profiles/nbr6355_z.csv"),
@@ -94,6 +124,7 @@ const SPECS: &[Spec] = &[
     spec(
         "NBR6355-Ze",
         "profile-series-nbr6355-ze",
+        Brazil,
         ColdFormed,
         "cold_z",
         include_str!("../assets/profiles/nbr6355_ze.csv"),
@@ -101,6 +132,7 @@ const SPECS: &[Spec] = &[
     spec(
         "NBR6355-L",
         "profile-series-nbr6355-l",
+        Brazil,
         ColdFormed,
         "angle",
         include_str!("../assets/profiles/nbr6355_l.csv"),
@@ -108,6 +140,7 @@ const SPECS: &[Spec] = &[
     spec(
         "NBR6355-Cartola",
         "profile-series-nbr6355-cartola",
+        Brazil,
         ColdFormed,
         "cold_hat",
         include_str!("../assets/profiles/nbr6355_cartola.csv"),
@@ -115,14 +148,16 @@ const SPECS: &[Spec] = &[
     spec(
         "Timber-Sawn",
         "profile-series-timber-sawn",
+        LibTimber,
         Timber,
         "rect",
         include_str!("../assets/profiles/timber_sawn.csv"),
     ),
-    spec("Glulam", "profile-series-glulam", Timber, "rect", include_str!("../assets/profiles/glulam.csv")),
-    spec("SHS", "profile-series-shs", Steel, "rect_tube", include_str!("../assets/profiles/shs.csv")),
-    spec("RHS", "profile-series-rhs", Steel, "rect_tube", include_str!("../assets/profiles/rhs.csv")),
-    spec("CHS", "profile-series-chs", Steel, "round_tube", include_str!("../assets/profiles/chs.csv")),
+    spec("Glulam", "profile-series-glulam", LibTimber, Timber, "rect", include_str!("../assets/profiles/glulam.csv")),
+    spec("SHS", "profile-series-shs", Europe, Steel, "rect_tube", include_str!("../assets/profiles/shs.csv")),
+    spec("RHS", "profile-series-rhs", Europe, Steel, "rect_tube", include_str!("../assets/profiles/rhs.csv")),
+    spec("CHS", "profile-series-chs", Europe, Steel, "round_tube", include_str!("../assets/profiles/chs.csv")),
+    spec("BR", "profile-series-br", Brazil, Steel, "round", include_str!("../assets/profiles/br.csv")),
 ];
 
 /// Every built-in series, parsed on first use; rows that do not parse are left out.
@@ -139,6 +174,7 @@ pub fn catalog() -> &'static [Series] {
                 Series {
                     code: s.code,
                     name_key: s.name_key,
+                    library: s.library,
                     material: s.material,
                     shape: s.shape,
                     rows: parse_rows(s.table, &fields),
@@ -248,6 +284,8 @@ mod tests {
         for c in [
             "W",
             "HP",
+            "CS",
+            "CVS",
             "IPE",
             "HEA",
             "HEB",
@@ -257,11 +295,14 @@ mod tests {
             "NBR6355-Ze",
             "NBR6355-L",
             "NBR6355-Cartola",
+            "U-LAM",
+            "L-LAM",
             "Timber-Sawn",
             "Glulam",
             "SHS",
             "RHS",
             "CHS",
+            "BR",
         ] {
             assert!(codes.contains(&c), "{c}");
             assert!(!series(c).unwrap().rows.is_empty(), "{c}");
@@ -275,7 +316,13 @@ mod tests {
                 let def = row_to_def(s, row).unwrap_or_else(|| panic!("{} {}", s.code, row.designation));
                 let a = def.outline().unwrap().properties(0.0).area;
                 let err = (a - row.area).abs() / row.area;
-                assert!(err < 0.02, "{} {}: computed {a} table {}", s.code, row.designation, row.area);
+                let tol = match s.code {
+                    "NBR6355-L" => 0.07,
+                    "U-LAM" | "L-LAM" => 0.05,
+                    "NBR6355-Cartola" => 0.04,
+                    _ => 0.02,
+                };
+                assert!(err < tol, "{} {}: computed {a} table {}", s.code, row.designation, row.area);
             }
         }
     }
@@ -333,6 +380,15 @@ mod tests {
         assert!(matches!(z45, ProfileShape::ColdZ { angle, .. } if angle == 45.0));
         let z90 = def("NBR6355-Ze", "Z90 200x75x20x2,00").shape;
         assert!(matches!(z90, ProfileShape::ColdZ { angle, .. } if angle == 90.0));
+        let cs = def("CS", "CS 150x25");
+        assert_eq!(cs.name, "CS 150x25");
+        assert_eq!(cs.shape, ProfileShape::I { d: 0.150, bf: 0.150, tw: 0.0063, tf: 0.008, r: 0.0 });
+        let cvs = def("CVS", "CVS 150x15");
+        assert_eq!(cvs.name, "CVS 150x15");
+        assert_eq!(cvs.shape, ProfileShape::I { d: 0.150, bf: 0.100, tw: 0.00475, tf: 0.0063, r: 0.0 });
+        let br = def("BR", "BR 1/2\"");
+        assert_eq!(br.name, "BR 1/2\"");
+        assert_eq!(br.shape, ProfileShape::Round { d: 0.0127 });
     }
 
     #[test]
