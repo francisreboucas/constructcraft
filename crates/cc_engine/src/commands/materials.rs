@@ -344,3 +344,63 @@ impl Command for MaterialTextureClear {
         Ok(material_out(s, &name))
     }
 }
+
+/// Import structural materials from a built-in regional library (`brazil`:
+/// ABNT NBR 7007/7008 and ASTM steels, NBR 7480 reinforcing bars and
+/// NBR 8953 / NBR 6118 concrete classes C20–C90) into the project. Materials
+/// whose names are already in the project are kept untouched.
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialLibraryImport {
+    /// Library code: `brazil` (default).
+    #[serde(default)]
+    pub library: Option<String>,
+    /// Category filter: `steel`, `rebar`, `concrete` or `all` (default: `all`).
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+impl Command for MaterialLibraryImport {
+    const NAME: &'static str = "material_library_import";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let lib = self.library.as_deref().unwrap_or("brazil").trim().to_lowercase();
+        if !matches!(lib.as_str(), "brazil" | "br" | "brasil") {
+            return Err(EngineError::invalid(format!("unknown material library '{lib}' (expected 'brazil')")));
+        }
+        let kind = self.kind.as_deref().unwrap_or("all").trim().to_lowercase();
+        if !matches!(kind.as_str(), "all" | "steel" | "rebar" | "concrete") {
+            return Err(EngineError::invalid(format!(
+                "kind must be 'all', 'steel', 'rebar' or 'concrete', not '{kind}'"
+            )));
+        }
+        let presets = cc_core::material::brazil_structural_materials();
+        let p = s.project();
+        let mut new = Vec::new();
+        let mut kept = Vec::new();
+        for m in presets {
+            let matches_kind = match kind.as_str() {
+                "steel" => m.name.starts_with("Steel "),
+                "rebar" => m.name.starts_with("Rebar "),
+                "concrete" => m.name.starts_with("Concrete "),
+                _ => true,
+            };
+            if !matches_kind {
+                continue;
+            }
+            if p.materials.iter().any(|existing| existing.name.trim().eq_ignore_ascii_case(m.name.trim())) {
+                kept.push(m.name);
+            } else {
+                new.push(m);
+            }
+        }
+        let imported: Vec<String> = new.iter().map(|m| m.name.clone()).collect();
+        if !new.is_empty() {
+            edit(s, t!("tx-modify-material"), |e| {
+                e.materials_mut().extend(new);
+                Ok(())
+            })?;
+        }
+        Ok(json!({ "imported": imported, "kept": kept }))
+    }
+}

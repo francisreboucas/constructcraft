@@ -1056,6 +1056,8 @@ mat-class = Klasse
 mat-color = Farbe
 mat-cut-pattern = Schnittmuster
 mat-delete = Löschen
+mat-import-brazil = Brasilien (NBR)
+mat-import-brazil-tip = Baustähle (NBR 7007/7008, ASTM), Bewehrungsstahl (NBR 7480) und Beton C20–C90 (NBR 6118) importieren
 mat-descriptive = Beschreibende Angaben
 mat-duplicate = Duplizieren
 mat-finish = Oberfläche
@@ -3163,6 +3165,9 @@ profile-series-glulam = Brettschichtholz
 profile-series-shs = Quadratrohre (SHS)
 profile-series-rhs = Rechteckrohre (RHS)
 profile-series-chs = Rundrohre (CHS)
+profile-series-cs = Geschweißtes I-Profil CS (ABNT NBR 5884)
+profile-series-cvs = Geschweißtes I-Profil CVS (ABNT NBR 5884)
+profile-series-br = Rundstahlstäbe (BR)
 
 # OBJ import
 action-import-obj = OBJ importieren…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = Doppelbett 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Kleiderschrank 5'-0"
 tpl-imp-type-kitchen-sink = Edelstahlspüle 4'-0"
 tpl-imp-type-floor-drain = Bodenablauf 6"
+tx-create-steel-connection = Stahlverbindung erstellen
+action-steel-connections = Stahlverbindungen
+cmd-desc-steel-connections = Erkennt Stützen, Träger, Fachwerke und Verbände und platziert typische Stahlverbindungsmakros (Fußplatte, Stirnplatte, Fahnenblech, Knotenblech, Stoß).
+msg-steel-connections-placed = { $count } Stahlverbindungen erstellt ({ $skipped } Knoten hatten bereits eine Verbindung).
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection

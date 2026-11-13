@@ -508,6 +508,82 @@ pub fn template_properties(m: &mut Material, class: MaterialClass) {
     m.graphics.cut = PatternFill::lines(cut);
 }
 
+/// NBR 6118:2023 §8.2.8: initial tangent modulus `Eci` and secant modulus `Ecs`
+/// in MPa for a concrete class of characteristic compressive strength `fck_mpa`
+/// (with coarse aggregate factor `alpha_e = 1.0`, granite/gneiss).
+pub fn concrete_modulus_nbr6118(fck_mpa: f64) -> (f64, f64) {
+    let eci =
+        if fck_mpa <= 50.0 { 5600.0 * fck_mpa.max(0.0).sqrt() } else { 21_500.0 * (fck_mpa / 10.0 + 1.25).cbrt() };
+    let alpha_i = (0.8 + 0.2 * fck_mpa / 80.0).min(1.0);
+    let ecs = alpha_i * eci;
+    (eci, ecs)
+}
+
+/// Structural steel grades (NBR 7007, NBR 7008 and ASTM): `(designation, fy_mpa, fu_mpa)`.
+pub const BRAZIL_STEELS: &[(&str, f64, f64)] = &[
+    ("MR250 (NBR 7007)", 250.0, 400.0),
+    ("AR350 (NBR 7007)", 350.0, 450.0),
+    ("AR415 (NBR 7007)", 415.0, 520.0),
+    ("ASTM A36", 250.0, 400.0),
+    ("ASTM A572 Gr50", 345.0, 450.0),
+    ("ASTM A992", 345.0, 450.0),
+    ("ASTM A588", 345.0, 485.0),
+    ("ZAR 230 (NBR 7008)", 230.0, 310.0),
+    ("ZAR 280 (NBR 7008)", 280.0, 380.0),
+    ("ZAR 345 (NBR 7008)", 345.0, 430.0),
+];
+
+/// Reinforcing steel grades (NBR 7480): `(designation, fyk_mpa)`.
+pub const BRAZIL_REBAR_STEELS: &[(&str, f64)] = &[("CA-25", 250.0), ("CA-50", 500.0), ("CA-60", 600.0)];
+
+/// Concrete classes of NBR 8953 / NBR 6118:2023 (fck in MPa).
+pub const BRAZIL_CONCRETE_CLASSES: &[u32] = &[20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90];
+
+/// Returns the catalog of Brazilian structural materials (NBR 8800, NBR 7007,
+/// NBR 7008, ASTM, NBR 7480 and NBR 6118:2023) with mechanical properties.
+pub fn brazil_structural_materials() -> Vec<Material> {
+    let mut list = Vec::new();
+    for &(grade, fy, _fu) in BRAZIL_STEELS {
+        let mut m = Material::new(format!("Steel {grade}"), [157, 161, 165]);
+        template_properties(&mut m, MaterialClass::Metal);
+        m.identity.description = format!("Structural steel {grade} (fy = {fy} MPa)");
+        m.physical.density = Some(7850.0);
+        m.physical.youngs_modulus = Some(200_000.0);
+        m.physical.poisson = Some(0.3);
+        m.physical.thermal_expansion = Some(1.2e-5);
+        m.physical.tensile_strength = Some(fy);
+        m.physical.compressive_strength = Some(fy);
+        list.push(m);
+    }
+    for &(grade, fyk) in BRAZIL_REBAR_STEELS {
+        let mut m = Material::new(format!("Rebar {grade} (NBR 7480)"), [107, 110, 114]);
+        template_properties(&mut m, MaterialClass::Metal);
+        m.identity.description = format!("Reinforcing steel {grade} (fyk = {fyk} MPa)");
+        m.physical.density = Some(7850.0);
+        m.physical.youngs_modulus = Some(210_000.0);
+        m.physical.poisson = Some(0.3);
+        m.physical.thermal_expansion = Some(1.0e-5);
+        m.physical.tensile_strength = Some(fyk);
+        m.physical.compressive_strength = Some(fyk);
+        list.push(m);
+    }
+    for &c in BRAZIL_CONCRETE_CLASSES {
+        let fck = f64::from(c);
+        let (_, ecs) = concrete_modulus_nbr6118(fck);
+        let ecs_rounded = (ecs / 100.0).round() * 100.0;
+        let mut m = Material::new(format!("Concrete C{c} (NBR 6118)"), [168, 168, 168]);
+        template_properties(&mut m, MaterialClass::Concrete);
+        m.identity.description = format!("Concrete class C{c} per NBR 8953 / NBR 6118 (fck = {c} MPa)");
+        m.physical.density = Some(2500.0);
+        m.physical.youngs_modulus = Some(ecs_rounded);
+        m.physical.poisson = Some(0.2);
+        m.physical.thermal_expansion = Some(1.0e-5);
+        m.physical.compressive_strength = Some(fck);
+        list.push(m);
+    }
+    list
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,5 +637,27 @@ mod tests {
         assert_eq!(m.shading_color(), [10, 20, 30]);
         m.graphics.use_appearance = true;
         assert_eq!(m.shading_color(), [200, 0, 0]);
+    }
+
+    #[test]
+    fn brazil_structural_materials_have_valid_mechanical_properties() {
+        let mats = brazil_structural_materials();
+        assert_eq!(mats.len(), BRAZIL_STEELS.len() + BRAZIL_REBAR_STEELS.len() + BRAZIL_CONCRETE_CLASSES.len());
+        let mr250 = mats.iter().find(|m| m.name == "Steel MR250 (NBR 7007)").unwrap();
+        assert_eq!(mr250.identity.class, MaterialClass::Metal);
+        assert_eq!(mr250.physical.density, Some(7850.0));
+        assert_eq!(mr250.physical.youngs_modulus, Some(200_000.0));
+        assert_eq!(mr250.physical.tensile_strength, Some(250.0));
+        let ca50 = mats.iter().find(|m| m.name == "Rebar CA-50 (NBR 7480)").unwrap();
+        assert_eq!(ca50.physical.youngs_modulus, Some(210_000.0));
+        assert_eq!(ca50.physical.tensile_strength, Some(500.0));
+        let c30 = mats.iter().find(|m| m.name == "Concrete C30 (NBR 6118)").unwrap();
+        assert_eq!(c30.identity.class, MaterialClass::Concrete);
+        assert_eq!(c30.physical.compressive_strength, Some(30.0));
+        assert_eq!(c30.physical.density, Some(2500.0));
+        let (eci, ecs) = concrete_modulus_nbr6118(30.0);
+        assert!(eci > 30_000.0 && ecs > 26_000.0);
+        let (_, ecs80) = concrete_modulus_nbr6118(80.0);
+        assert!(ecs80 > 40_000.0);
     }
 }

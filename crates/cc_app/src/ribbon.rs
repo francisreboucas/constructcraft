@@ -83,6 +83,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Measure => Icon::Measure,
         Tool::JoinGeometry { unjoin: false } => Icon::JoinGeometry,
         Tool::JoinGeometry { unjoin: true } => Icon::UnjoinGeometry,
+        Tool::SteelConnection => Icon::Connector,
         Tool::AttachTop => Icon::AttachTop,
         Tool::Paste => Icon::Paste,
         Tool::Dimension { mode, .. } => dimension_icon(*mode),
@@ -751,7 +752,11 @@ fn structure_tab(ui: &mut Ui, state: &mut AppState) {
             });
         }
     }
-    group(ui, t!("group-profiles"), |ui| command_button(ui, state, Profiles));
+    group(ui, t!("group-profiles"), |ui| command_buttons(ui, state, &[Profiles, Materials]));
+    group(ui, t!("group-steel-connections"), |ui| {
+        command_button(ui, state, SteelConnection);
+        stacks(ui, state, &[&[SteelConnections]]);
+    });
     group(ui, t!("group-foundation"), |ui| {
         command_button(ui, state, place(Category::Foundation));
         stacks(ui, state, &[&[FootingsUnderColumns, StripFootingsUnderWalls, FoundationSlab]]);
@@ -1380,6 +1385,14 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                     (true, _) => "hint-join-pick",
                     (false, false) => "hint-join-second",
                     (false, true) => "hint-unjoin-second",
+                };
+                ui.label(theme::muted(crate::i18n::tr(key)));
+            }
+            Tool::SteelConnection => {
+                let key = if state.interaction.targets.is_empty() {
+                    "hint-steel-conn-first"
+                } else {
+                    "hint-steel-conn-second"
                 };
                 ui.label(theme::muted(crate::i18n::tr(key)));
             }

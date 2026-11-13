@@ -128,6 +128,8 @@ pub enum Tool {
     JoinGeometry {
         unjoin: bool,
     },
+    /// Pick two structural members (beams or columns) to configure a steel connection.
+    SteelConnection,
     /// Click the roof, ceiling or floor the selected walls' tops attach to
     /// (the walls are kept in `interaction.targets`).
     AttachTop,
@@ -236,6 +238,7 @@ impl Tool {
             Tool::Measure => "tool-measure",
             Tool::JoinGeometry { unjoin: false } => "tool-join-geometry",
             Tool::JoinGeometry { unjoin: true } => "tool-unjoin-geometry",
+            Tool::SteelConnection => "tool-steel-connection",
             Tool::AttachTop => "tool-attach-top",
             Tool::Paste => "action-paste",
             Tool::MatchType => "tool-match-type",
@@ -1519,6 +1522,7 @@ pub fn handle(
         (Tool::Measure, _) => measure_tool(ui, resp, painter, state, xf, drawing),
         // Joining geometry too (sections show it best).
         (Tool::JoinGeometry { unjoin }, _) => crate::modify::join_tool(resp, painter, state, xf, drawing, *unjoin),
+        (Tool::SteelConnection, _) => crate::modify::steel_connection_tool(resp, painter, state, xf, drawing),
         (Tool::AttachTop, _) => crate::modify::attach_tool(resp, painter, state, xf, drawing),
         // Text notes too.
         (Tool::Text { type_id }, _) => {

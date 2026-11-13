@@ -1075,6 +1075,8 @@ mat-class = Class
 mat-color = Color
 mat-cut-pattern = Cut Pattern
 mat-delete = Delete
+mat-import-brazil = Brazil (NBR)
+mat-import-brazil-tip = Import structural steels (NBR 7007/7008, ASTM), rebar (NBR 7480) and concrete C20–C90 (NBR 6118)
 mat-descriptive = Descriptive Information
 mat-duplicate = Duplicate
 mat-finish = Finish
@@ -3163,6 +3165,9 @@ profile-series-glulam = Glued laminated timber
 profile-series-shs = Square hollow sections (SHS)
 profile-series-rhs = Rectangular hollow sections (RHS)
 profile-series-chs = Circular hollow sections (CHS)
+profile-series-cs = CS welded I section (ABNT NBR 5884)
+profile-series-cvs = CVS welded I section (ABNT NBR 5884)
+profile-series-br = Round steel bars (BR)
 
 # OBJ import
 action-import-obj = Import OBJ…
@@ -3393,3 +3398,16 @@ tpl-imp-type-bed = Double Bed 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = Wardrobe 5'-0"
 tpl-imp-type-kitchen-sink = Stainless Sink 4'-0"
 tpl-imp-type-floor-drain = Floor Drain 6"
+tx-create-steel-connection = Create steel connection
+action-steel-connections = Auto Connections
+cmd-desc-steel-connections = Recognizes columns, beams, trusses and bracings and places typical steel connection macros (base plate, end plate, single plate, gusset plate, splice).
+msg-steel-connections-placed = { $count } steel connections created ({ $skipped } joints already had a connection).
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection

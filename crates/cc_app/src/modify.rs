@@ -472,6 +472,44 @@ pub fn join_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &
     }
 }
 
+pub(crate) fn is_steel_member(state: &AppState, id: ElementId) -> bool {
+    state
+        .project()
+        .element(id)
+        .is_some_and(|e| matches!(e.category(), cc_core::Category::Beam | cc_core::Category::Column))
+}
+
+pub fn steel_connection_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, drawing: &Drawing2D) {
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let hovered = drawing.hit_test(raw, 6.0 / xf.scale).filter(|id| is_steel_member(state, *id));
+    let first = state.interaction.targets.first().copied();
+    let mut lit: BTreeSet<ElementId> = first.into_iter().collect();
+    lit.extend(hovered);
+    paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
+    if resp.clicked() {
+        steel_connection_pick(state, hovered);
+    }
+}
+
+pub(crate) fn steel_connection_pick(state: &mut AppState, hovered: Option<ElementId>) {
+    let first = state.interaction.targets.first().copied();
+    let Some(id) = hovered else {
+        state.message = if first.is_none() { t!("hint-steel-conn-first") } else { t!("hint-steel-conn-second") };
+        return;
+    };
+    match first {
+        None => {
+            state.interaction.targets = vec![id];
+            state.message = t!("hint-steel-conn-second");
+        }
+        Some(first) if first != id => {
+            state.interaction.targets.clear();
+            crate::steel_connection_dialog::open(state, vec![first, id]);
+        }
+        Some(_) => {}
+    }
+}
+
 /// Attach Top: the selected walls wait for a click on the roof, ceiling or
 /// floor their tops attach to.
 pub fn start_attach(state: &mut AppState) {

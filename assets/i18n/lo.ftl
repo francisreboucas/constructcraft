@@ -1027,6 +1027,8 @@ mat-class = ໝວດວັດສະດຸ
 mat-color = ສີ
 mat-cut-pattern = ລວດລາຍໜ້າຕັດ
 mat-delete = ລຶບ
+mat-import-brazil = ບຣາຊິວ (NBR)
+mat-import-brazil-tip = ນຳເຂົ້າເຫຼັກໂຄງສ້າງ (NBR 7007/7008, ASTM), ເຫຼັກເສີມ (NBR 7480) ແລະ ຄອນກຣີດ C20–C90 (NBR 6118)
 mat-descriptive = ຂໍ້ມູນຄຳບັນຍາຍ
 mat-duplicate = ສຳເນົາຊ້ຳ
 mat-finish = ຜິວຕົກແຕ່ງ
@@ -3165,6 +3167,9 @@ profile-series-glulam = ໄມ້ອັດກາວເປັນຊັ້ນ
 profile-series-shs = ທໍ່ສີ່ຫຼ່ຽມຈັດຕຸລັດ (SHS)
 profile-series-rhs = ທໍ່ສີ່ຫຼ່ຽມຜືນຜ້າ (RHS)
 profile-series-chs = ທໍ່ກົມ (CHS)
+profile-series-cs = ເຫຼັກຮູບ I ເຊື່ອມ CS (ABNT NBR 5884)
+profile-series-cvs = ເຫຼັກຮູບ I ເຊື່ອມ CVS (ABNT NBR 5884)
+profile-series-br = ເຫຼັກກົມຕັນ (BR)
 
 # OBJ import
 action-import-obj = ນຳເຂົ້າ OBJ…
@@ -3395,3 +3400,16 @@ tpl-imp-type-bed = ຕຽງຄູ່ 5'-0" x 6'-8"
 tpl-imp-type-wardrobe = ຕູ້ເສື້ອຜ້າ 5'-0"
 tpl-imp-type-kitchen-sink = ອ່າງສະແຕນເລດ 4'-0"
 tpl-imp-type-floor-drain = ຈຸດລະບາຍນ້ຳພື້ນ 6"
+tx-create-steel-connection = ສ້າງຈຸດຕໍ່ໂຄງສ້າງເຫຼັກ
+action-steel-connections = ຈຸດຕໍ່ເຫຼັກ
+cmd-desc-steel-connections = ກວດຈັບເສົາ, ຄານ, ໂຄງຖັກ ແລະ ຄ້ຳยัน ແລ້ວສ້າງຈຸດຕໍ່ເຫຼັກມາດຕະຖານໂດຍອັດຕະໂນມັດ.
+msg-steel-connections-placed = ສ້າງຈຸດຕໍ່ເຫຼັກແລ້ວ { $count } ຈຸດ ({ $skipped } ຈຸດມີຢູ່ແລ້ວ).
+profile-series-u-lam = Rolled U channel (ABNT NBR)
+profile-series-l-lam = Rolled equal/unequal angle L (ABNT NBR)
+
+group-steel-connections = Steel Connections
+action-steel-connection = Steel Connection
+cmd-desc-steel-connection = Pick two beams or columns (or one column) to configure and place a steel connection.
+tool-steel-connection = Steel Connection
+hint-steel-conn-first = Click the first beam or column for the steel connection
+hint-steel-conn-second = Click the second beam or column to configure the connection
