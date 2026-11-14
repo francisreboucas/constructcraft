@@ -968,10 +968,7 @@ impl SunState {
 /// direction; `None` for plans and other views.
 pub fn view_forward(view: &View) -> Option<DVec2> {
     match &view.kind {
-        ViewKind::ThreeD { camera, .. } => {
-            let yaw = camera.yaw_deg.to_radians();
-            yaw.is_finite().then(|| DVec2::new(yaw.sin(), yaw.cos()))
-        }
+        ViewKind::ThreeD { camera, .. } => camera_forward(camera),
         ViewKind::Elevation { direction } => Some(direction.look()),
         ViewKind::Section { start, end, .. } => {
             let d = (*end - *start).try_normalize()?;
@@ -979,6 +976,22 @@ pub fn view_forward(view: &View) -> Option<DVec2> {
             Some(DVec2::new(d.y, -d.x))
         }
         _ => None,
+    }
+}
+
+/// The plan direction a 3D camera looks along (its heading); `None` when
+/// its yaw is not a number. A live camera the viewer turns places a sun
+/// relative to the view as the stored one does in [`view_forward`].
+pub fn camera_forward(camera: &crate::CameraState) -> Option<DVec2> {
+    let yaw = camera.yaw_deg.to_radians();
+    yaw.is_finite().then(|| DVec2::new(yaw.sin(), yaw.cos()))
+}
+
+impl SunSettings {
+    /// Whether the sun is placed relative to the direction the viewer
+    /// looks along (lighting `relative_to_view`): it turns with the view.
+    pub fn follows_view(&self) -> bool {
+        matches!(self.mode, SunMode::Lighting { relative_to_view: true, .. })
     }
 }
 
