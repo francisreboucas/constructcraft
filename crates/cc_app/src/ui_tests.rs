@@ -4589,6 +4589,45 @@ fn sun_settings_give_a_view_a_sun_that_cancel_takes_away() {
     assert!(state.project().view(plan).unwrap().sun.is_none());
 }
 
+/// *Remove Sun* on a view that had none changes nothing: no undo step and
+/// the document as it was. On a view with a sun it is one undo step.
+#[test]
+fn removing_a_sun_the_view_did_not_have_changes_nothing() {
+    use crate::commands::UiCommand;
+    let mut state = sample_state();
+    let plan = sample_view(&state, cc_core::View::is_plan);
+    state.active_view = Some(plan);
+    let (depth, before, dirty) =
+        (state.session.doc.undo_depth(), state.project().clone(), state.session.doc.is_dirty());
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::SunSettings);
+    let mut harness = sun_harness(state);
+    harness.get_by_label(&t!("sun-remove")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.sun.is_none());
+    assert_eq!(state.session.doc.undo_depth(), depth);
+    assert!(*state.project() == before, "the project is as it was");
+    assert_eq!(state.session.doc.is_dirty(), dirty);
+
+    // With a sun: removing it is one step, which undo takes back.
+    let set = cc_engine::commands::views::ViewSet {
+        view: cc_engine::Ref::Id(plan.0),
+        sun: Some(Some(Default::default())),
+        ..Default::default()
+    };
+    harness.state_mut().session.run(set).unwrap();
+    let depth = harness.state().session.doc.undo_depth();
+    crate::commands::run(harness.state_mut(), &egui::Context::default(), UiCommand::SunSettings);
+    harness.run();
+    harness.get_by_label(&t!("sun-remove")).click();
+    harness.run();
+    let state = harness.state_mut();
+    assert!(state.project().view(plan).unwrap().sun.is_none());
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    state.session.doc.undo();
+    assert!(state.project().view(plan).unwrap().sun.is_some());
+}
+
 /// Switching to lighting and back keeps the date; a built-in preset applies
 /// its mode; a preset saved in the dialog goes away on Cancel.
 #[test]

@@ -47,6 +47,8 @@ pub struct SunDialog {
     edits: Edits,
     /// Undo depth when the dialog opened: OK folds what follows into one step.
     start: usize,
+    /// The document was saved when the dialog opened.
+    clean: bool,
     /// The project preset last clicked or saved (several may share a mode).
     picked: Option<String>,
     /// A preset name being typed.
@@ -85,13 +87,15 @@ pub fn open_for(state: &mut AppState, view: ViewId) {
         return;
     }
     let had_sun = v.sun.is_some();
+    let clean = !state.session.doc.is_dirty();
     let edits = Edits::begin(state);
     let start = state.session.doc.undo_depth();
     if !had_sun {
         set_sun(state, view, SunArg::default());
     }
     let last_date = state.project().view(view).and_then(|v| v.sun.as_ref()).and_then(|s| date_of(&s.mode));
-    state.dialogs.sun = Some(SunDialog { view, edits, start, picked: None, naming: None, error: None, last_date });
+    state.dialogs.sun =
+        Some(SunDialog { view, edits, start, clean, picked: None, naming: None, error: None, last_date });
 }
 
 pub fn show(ctx: &Context, state: &mut AppState) {
@@ -126,12 +130,15 @@ pub fn show(ctx: &Context, state: &mut AppState) {
     }
 }
 
-/// Close the dialog: keep its edits as one undo step (OK) or undo them (Cancel).
+/// Close the dialog: keep its edits as one undo step (OK) or undo them
+/// (Cancel). Edits that cancel out leave no step (a sun given on opening
+/// and removed), and a saved document left as it was stays saved.
 fn finish(state: &mut AppState, d: SunDialog, keep: bool) {
-    if keep {
-        state.session.doc.squash_since(d.start, t!("action-sun-settings"));
-    }
+    let kept = keep && state.session.doc.squash_since(d.start, t!("action-sun-settings"));
     d.edits.finish(state, keep);
+    if d.clean && !kept && state.session.doc.undo_depth() <= d.start {
+        state.session.doc.mark_saved();
+    }
 }
 
 // ---------------------------------------------------------------- changes
