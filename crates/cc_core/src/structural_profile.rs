@@ -972,9 +972,12 @@ impl ProfileShape {
                 }
                 let half = sweep.to_radians() / 2.0;
                 fit(2.0 * r_out * half.sin() >= MIN_THICKNESS, "the sweep is too small for the radius")?;
-                // Chords as fine as a circle's, `segs` to the quarter turn; an
-                // even number, so the middle of the outer arc is a point.
-                let n = 2 * ((sweep / 180.0) * segs as f64).ceil().max(1.0) as usize;
+                // Chords as fine as a circle's, `segs` to the quarter turn, and no
+                // wider than twice the step arcs are drawn with (the radii are
+                // those of a ring, meters across); an even number, so the middle
+                // of the outer arc is a point.
+                let fine = (sweep.to_radians() / (4.0 * crate::arc::ARC_STEP)).ceil();
+                let n = 2 * ((sweep / 180.0) * segs as f64).ceil().max(fine).max(1.0) as usize;
                 let at = |r: f64, i: usize| {
                     let a = FRAC_PI_2 - half + 2.0 * half * i as f64 / n as f64;
                     v2(a.cos(), a.sin()) * r

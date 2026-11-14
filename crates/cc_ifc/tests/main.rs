@@ -9,6 +9,7 @@ mod classes;
 mod connections;
 mod rebar;
 mod round_trip;
+mod tank;
 
 /// Every `.rs` file of `tests/` is declared above, so none is skipped.
 #[test]

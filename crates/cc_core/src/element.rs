@@ -1730,10 +1730,13 @@ fn texts_fit(partition: &str, bar_mark: Option<&str>) -> bool {
 }
 
 impl ShapedRebar {
-    /// At most this many bars in one element.
-    pub const MAX_BARS: usize = 1000;
+    /// At most this many bars in one element (the ties of a tank wall are
+    /// a set of over a thousand).
+    pub const MAX_BARS: usize = 20_000;
     /// At most this many points along one bar.
     pub const MAX_POINTS: usize = 2000;
+    /// At most this many points in all the bars of one element.
+    pub const MAX_TOTAL_POINTS: usize = 400_000;
 
     /// Every point of every bar.
     pub fn points_mut(&mut self) -> impl Iterator<Item = &mut DVec3> {
@@ -1741,9 +1744,11 @@ impl ShapedRebar {
     }
 
     /// Whether the bars are usable: one to [`Self::MAX_BARS`] of them, each
-    /// with two to [`Self::MAX_POINTS`] finite points and some length.
+    /// with two to [`Self::MAX_POINTS`] finite points and some length, and
+    /// no more than [`Self::MAX_TOTAL_POINTS`] points in all.
     pub fn is_valid(&self) -> bool {
         (1..=Self::MAX_BARS).contains(&self.bars.len())
+            && self.bars.iter().map(Vec::len).sum::<usize>() <= Self::MAX_TOTAL_POINTS
             && self.bars.iter().all(|b| {
                 (2..=Self::MAX_POINTS).contains(&b.len())
                     && b.iter().all(|p| p.is_finite())

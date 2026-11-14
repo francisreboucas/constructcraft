@@ -280,6 +280,60 @@ fn arc_wall(axis: &[DVec2], footprint: &[DVec2]) -> Option<(DVec2, DVec2, f64, f
     (on_faces && centered && thickness >= 0.005 && arc.length() >= 0.01).then_some((start, end, bulge, thickness))
 }
 
+/// The piece of a ring between two radii: its ring's center, the radii, the
+/// angle it turns through (radians) and the unit direction of its bisector,
+/// out of the ring.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct RingSector {
+    center: DVec2,
+    r_in: f64,
+    r_out: f64,
+    sweep: f64,
+    axis: DVec2,
+}
+
+/// The ring sector `curves` draw: two arcs about one center, of different
+/// radii and the same turn, and two straight sides between their ends along
+/// radii. `None` for any other outline, or a turn past the profile's limit.
+fn ring_sector(curves: &[cc_core::sketch::SketchCurve]) -> Option<RingSector> {
+    use cc_core::sketch::SketchCurve;
+    if curves.len() != 4 {
+        return None;
+    }
+    let tol = 1e-4;
+    let mut arcs: Vec<(cc_core::arc::Arc, DVec2, DVec2)> = Vec::new();
+    let mut lines: Vec<(DVec2, DVec2)> = Vec::new();
+    for curve in curves {
+        match *curve {
+            SketchCurve::Arc { a, b, bulge } => arcs.push((cc_core::arc::Arc::from_bulge(a, b, bulge)?, a, b)),
+            SketchCurve::Line { a, b } => lines.push((a, b)),
+            _ => return None,
+        }
+    }
+    let [(first, ..), (second, ..)] = arcs.as_slice() else { return None };
+    if lines.len() != 2 || first.center.distance(second.center) > tol {
+        return None;
+    }
+    let (inner, outer) = if first.radius < second.radius { (&arcs[0], &arcs[1]) } else { (&arcs[1], &arcs[0]) };
+    let (center, r_in, r_out) = (outer.0.center, inner.0.radius, outer.0.radius);
+    let sweep = outer.0.sweep.abs();
+    let limit = ProfileShape::MAX_SECTOR_SWEEP.to_radians();
+    if r_out - r_in < 1e-4 || (inner.0.sweep.abs() - sweep).abs() > 1e-4 || !(1e-4..limit - 1e-6).contains(&sweep) {
+        return None;
+    }
+    // The straight sides run along radii: each joins an end of one arc to the end of the other on its ray.
+    let radial = |(a, b): (DVec2, DVec2)| {
+        let (da, db) = ((a - center).normalize_or_zero(), (b - center).normalize_or_zero());
+        da.distance(db) < 1e-4 && ((a.distance(center) - b.distance(center)).abs() - (r_out - r_in)).abs() < tol
+    };
+    if !lines.iter().copied().all(radial) {
+        return None;
+    }
+    // Under half a turn, the middle of the outer arc's chord lies on the bisector.
+    let axis = ((outer.1 + outer.2) / 2.0 - center).try_normalize()?;
+    Some(RingSector { center, r_in, r_out, sweep, axis })
+}
+
 /// Entities that are not physical objects: spatial structure, zones,
 /// features cut from their hosts, ports, annotations and analysis models.
 fn is_non_physical(name: &str) -> bool {
@@ -672,6 +726,11 @@ impl<'a> Importer<'a> {
                 (Some("DRIVEN"), _) => PileKind::PrecastDriven,
                 (Some("USERDEFINED"), _) if object_type.contains("AUGER") => PileKind::ContinuousFlightAuger,
                 (Some("USERDEFINED"), _) if object_type.contains("MICRO") => PileKind::Micro,
+                // The predefined type of older files says how the pile carries its load
+                // (friction, cohesion, support): the construction type says how it is made.
+                (_, Some("CAST_IN_PLACE")) => PileKind::Bored,
+                (_, Some("PRECAST_CONCRETE")) => PileKind::PrecastDriven,
+                (_, Some("PREFAB_STEEL")) => PileKind::Steel,
                 _ => PileKind::Other,
             }
         });
@@ -730,6 +789,45 @@ impl<'a> Importer<'a> {
                 e.kind = ElementKind::Pile(want);
             }
         }
+    }
+
+    /// The part of the structure a product belongs to, as other programs
+    /// write it: the text of a property named "Partition" (in English,
+    /// Portuguese, Spanish or French, with or without accents) in any of its
+    /// property sets.
+    fn foreign_partition(&self, owner: u32) -> Option<String> {
+        let f = self.f;
+        let plain = |name: &str| -> String {
+            name.trim()
+                .to_lowercase()
+                .chars()
+                .map(|c| match c {
+                    'ç' => 'c',
+                    'ã' | 'á' | 'à' | 'â' => 'a',
+                    'ó' | 'õ' | 'ô' => 'o',
+                    'í' => 'i',
+                    other => other,
+                })
+                .collect()
+        };
+        let wanted = ["partition", "particao", "particion", "partie"];
+        for pset in self.psets_of.get(&owner).into_iter().flatten().filter_map(|s| f.get(*s)) {
+            if pset.name != "IFCPROPERTYSET" {
+                continue;
+            }
+            for prop in pset.arg(4).as_list().iter().filter_map(|p| f.deref(p)) {
+                if prop.name != "IFCPROPERTYSINGLEVALUE"
+                    || !prop.arg(0).as_str().is_some_and(|n| wanted.contains(&plain(n).as_str()))
+                {
+                    continue;
+                }
+                let text = prop.arg(2).as_str().map(clean_name).filter(|t| !t.is_empty());
+                if let Some(text) = text.filter(|t| t.chars().count() <= cc_core::bar_marks::MAX_MARK_TEXT) {
+                    return Some(text);
+                }
+            }
+        }
+        None
     }
 
     /// After a native import attempt: anything not imported natively comes in
@@ -2055,7 +2153,7 @@ impl<'a> Importer<'a> {
             "BASESLAB" => {
                 return openings.is_empty()
                     && slab_like(&boundary, thickness)
-                    && self.add_foundation_slab(id, e, boundary, z1, thickness);
+                    && self.add_foundation_slab(id, e, boundary, sketch, z1, thickness);
             }
             _ => {}
         }
@@ -2079,7 +2177,15 @@ impl<'a> Importer<'a> {
     }
 
     /// A foundation slab with its top at `z1`.
-    fn add_foundation_slab(&mut self, id: u32, e: &Entity, boundary: Vec<DVec2>, z1: f64, thickness: f64) -> bool {
+    fn add_foundation_slab(
+        &mut self,
+        id: u32,
+        e: &Entity,
+        boundary: Vec<DVec2>,
+        sketch: Option<cc_core::sketch::Sketch>,
+        z1: f64,
+        thickness: f64,
+    ) -> bool {
         if thickness < 1e-3 {
             return false;
         }
@@ -2106,7 +2212,9 @@ impl<'a> Importer<'a> {
                 pile_cap: None,
             },
         );
-        let foundation = Foundation::new(FoundationShape::Slab { boundary }, z1 - elevation);
+        // The circles and arcs of its profile, so a round raft keeps its true area and volume.
+        let mut foundation = Foundation::new(FoundationShape::Slab { boundary }, z1 - elevation);
+        foundation.sketch = sketch;
         self.add_element(id, e, level, type_id, Self::tag(e), ElementKind::Foundation(foundation));
         true
     }
@@ -2542,7 +2650,24 @@ impl<'a> Importer<'a> {
         // with the column; otherwise its footprint is the section.
         let (xw, yw) = (ex.plane_vector(DVec2::X).truncate(), ex.plane_vector(DVec2::Y).truncate());
         let rigid = (xw.length() - 1.0).abs() < 1e-6 && (yw.length() - 1.0).abs() < 1e-6 && xw.dot(yw).abs() < 1e-6;
-        let (read, position, rotation) = if rigid && xw.perp_dot(yw) > 0.0 {
+        // The piece of a ring (two concentric arcs joined by radial sides): the annular sector
+        // itself, placed by its ring, so the columns around a tank share one profile and type.
+        let sector = ex.footprint_curves().as_deref().and_then(ring_sector).filter(|s| s.r_in > 1e-6);
+        let (read, position, rotation) = if let Some(s) = sector {
+            // To the hundredth of a millimeter and the thousandth of a degree: files round
+            // their points, and columns alike but for that noise are one profile.
+            let (length, angle) = (|v: f64| (v * 1e5).round() / 1e5, |v: f64| (v * 1e3).round() / 1e3);
+            let shape = ProfileShape::AnnularSector {
+                r_in: length(s.r_in),
+                r_out: length(s.r_out),
+                sweep: angle(s.sweep.to_degrees()),
+            };
+            let Some(center) = shape.sector_center() else { return false };
+            let name = self.read_section(id, &ex).and_then(|r| r.name);
+            let read = ReadSection { shape, name, rotation_deg: 0.0, center: DVec2::ZERO };
+            // The sector's own Y axis points out of the ring along its bisector.
+            (read, s.center - s.axis * center.y, s.axis.to_angle().to_degrees() - 90.0)
+        } else if rigid && xw.perp_dot(yw) > 0.0 {
             let Some(read) = self.read_section(id, &ex) else { return false };
             let position = ex.plane_point(read.center).truncate();
             (read, position, xw.y.atan2(xw.x).to_degrees())
@@ -2789,7 +2914,9 @@ impl<'a> Importer<'a> {
             let text = self.pset_texts(id, &is_set, name).first().map(|t| clean_name(t));
             text.filter(|t| !t.is_empty() && t.chars().count() <= cc_core::bar_marks::MAX_MARK_TEXT)
         };
-        let (partition, bar_mark, own_grade) = (own("Partition").unwrap_or_default(), own("BarMark"), own("Grade"));
+        let (partition, bar_mark, own_grade) = (own("Partition"), own("BarMark"), own("Grade"));
+        // Another program's sets say their part of the structure in a property of that name.
+        let partition = partition.or_else(|| self.foreign_partition(id)).unwrap_or_default();
         let rebar = ShapedRebar { bars, properties: self.property_sets(id), partition, bar_mark };
         if !rebar.is_valid() {
             return false;
@@ -3215,6 +3342,19 @@ impl<'a> Importer<'a> {
             && let Some((start, end, bulge, width)) = arc_wall(&body.axis_points, &ex.footprint())
         {
             let read = self.rect_section(id, width, ex.vector.z.abs());
+            return self.add_beam(id, e, (start, end), bulge, read, z1);
+        }
+        // The same band drawn without an axis: its profile is two concentric
+        // arcs joined by radial ends, and the beam's axis runs midway.
+        if body.axis_points.is_empty()
+            && let Some(ex) = body.sole_extrusion().filter(|e| e.is_vertical())
+            && let Some(s) = ex.footprint_curves().as_deref().and_then(ring_sector).filter(|s| s.r_in > 1e-6)
+        {
+            let (radius, half) = ((s.r_in + s.r_out) / 2.0, s.sweep / 2.0);
+            let end_at = |turn: f64| s.center + DVec2::from_angle(turn).rotate(s.axis) * radius;
+            // Counter-clockwise from start to end: a positive bulge.
+            let (start, end, bulge) = (end_at(-half), end_at(half), (s.sweep / 4.0).tan());
+            let read = self.rect_section(id, s.r_out - s.r_in, ex.vector.z.abs());
             return self.add_beam(id, e, (start, end), bulge, read, z1);
         }
         // A plan footprint extruded upwards along an axis: the axis keeps the
