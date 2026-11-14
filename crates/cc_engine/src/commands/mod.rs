@@ -61,6 +61,7 @@ pub mod steel_building;
 pub mod strip_rebar;
 pub mod structure;
 pub mod structure_material;
+pub mod sun;
 pub mod sweep;
 pub mod topography;
 pub mod types;

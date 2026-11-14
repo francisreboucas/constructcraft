@@ -32,6 +32,8 @@ pub fn site_json(s: &Session) -> Value {
             "true_north": site.true_north,
             "place": site.place,
             "address": site.address.parts().iter().map(|(k, v)| (k.to_string(), json!(v))).collect::<serde_json::Map<_, _>>(),
+            "utc_offset": site.utc_offset,
+            "utc_offset_used": site.offset_hours(),
         }),
     }
 }
@@ -39,8 +41,10 @@ pub fn site_json(s: &Session) -> Value {
 /// The project's site location: latitude and longitude of the project
 /// origin (degrees, WGS 84), its elevation above sea level (meters), the
 /// angle from project north to true north (degrees counter-clockwise),
-/// the place name and the parts of the postal address; `site` is null
-/// when no location is set. `address` is the project address line.
+/// the place name, the parts of the postal address, and local time's
+/// offset from UTC in hours (`utc_offset`, null when not set, and
+/// `utc_offset_used`: the one set, else the longitude's nominal time zone,
+/// which the sun uses); `site` is null when no location is set. `address` is the project address line.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SiteGet {}
@@ -56,8 +60,8 @@ impl Command for SiteGet {
 /// Set the project's site location, in one undo step: the latitude and
 /// longitude of the project origin (both needed when the project has no
 /// location yet), its elevation above sea level, true north and the
-/// place and address found by a map search. Fields left out keep their
-/// values. When address parts are given the project address (title
+/// place and address found by a map search, and the offset from UTC.
+/// Fields left out keep their values. When address parts are given the project address (title
 /// blocks, IFC) is rewritten from them unless `project_address` is false.
 /// `clear` removes the location.
 #[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
@@ -84,6 +88,10 @@ pub struct SiteSet {
     /// Rewrite the project address from the address parts (default true when `address` is given).
     #[serde(default)]
     pub project_address: Option<bool>,
+    /// Local time's offset from UTC, hours (-12 to 14; fractions allowed),
+    /// or `null` for the longitude's nominal time zone.
+    #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
+    pub utc_offset: Option<Option<f64>>,
     /// Remove the site location (nothing else may be given).
     #[serde(default)]
     pub clear: Option<bool>,
@@ -99,7 +107,8 @@ impl Command for SiteSet {
                 || self.elevation.is_some()
                 || self.true_north.is_some()
                 || self.place.is_some()
-                || self.address.is_some();
+                || self.address.is_some()
+                || self.utc_offset.is_some();
             if others {
                 return Err(EngineError::invalid("clear takes no other field"));
             }
@@ -135,6 +144,11 @@ impl Command for SiteSet {
         }
         if let Some(v) = self.true_north {
             site.true_north = normalize_angle(finite(v, "true_north")?);
+        }
+        match self.utc_offset {
+            Some(Some(v)) => site.utc_offset = Some(super::sun::utc_offset(v)?),
+            Some(None) => site.utc_offset = None,
+            None => {}
         }
         if let Some(v) = self.place {
             site.place = v.trim().to_string();

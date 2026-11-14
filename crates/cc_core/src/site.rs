@@ -37,6 +37,11 @@ pub struct SiteLocation {
     /// Parts of the postal address.
     #[serde(default)]
     pub address: SiteAddress,
+    /// Local time's offset from UTC, hours east (within
+    /// [`crate::sun::UTC_OFFSET_RANGE`]); `None`: the offset of the
+    /// longitude's time zone (see [`SiteLocation::offset_hours`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub utc_offset: Option<f64>,
 }
 
 /// Parts of a postal address (any may be empty).
@@ -106,10 +111,23 @@ impl SiteLocation {
             true_north: 0.0,
             place: String::new(),
             address: SiteAddress::default(),
+            utc_offset: None,
         }
     }
 
-    /// Finite coordinates on Earth, a finite elevation in range and a finite north angle.
+    /// Local time's offset from UTC, hours east: the one set, else the
+    /// longitude's nominal zone (`longitude / 15`, rounded).
+    pub fn offset_hours(&self) -> f64 {
+        let range = &crate::sun::UTC_OFFSET_RANGE;
+        match self.utc_offset {
+            Some(o) if o.is_finite() && range.contains(&o) => o,
+            _ if self.longitude.is_finite() => (self.longitude / 15.0).round().clamp(*range.start(), *range.end()),
+            _ => 0.0,
+        }
+    }
+
+    /// Finite coordinates on Earth, a finite elevation in range, a finite
+    /// north angle and an offset from UTC in range, if set.
     pub fn is_valid(&self) -> bool {
         self.latitude.is_finite()
             && self.longitude.is_finite()
@@ -118,12 +136,18 @@ impl SiteLocation {
             && self.elevation.is_finite()
             && ELEVATION_RANGE.contains(&self.elevation)
             && self.true_north.is_finite()
+            && self.utc_offset.is_none_or(|o| o.is_finite() && crate::sun::UTC_OFFSET_RANGE.contains(&o))
     }
 
     /// Fix what can be fixed (north angle into `(-180, 180]`, texts cut to
-    /// [`MAX_TEXT`]); `false` when the location is beyond repair.
+    /// [`MAX_TEXT`], an offset from UTC out of range dropped); `false` when
+    /// the location is beyond repair.
     pub fn repair(&mut self) -> (bool, usize) {
         let mut fixes = 0;
+        if self.utc_offset.is_some_and(|o| !(o.is_finite() && crate::sun::UTC_OFFSET_RANGE.contains(&o))) {
+            self.utc_offset = None;
+            fixes += 1;
+        }
         if self.true_north.is_finite() {
             let n = normalize_angle(self.true_north);
             if n != self.true_north {

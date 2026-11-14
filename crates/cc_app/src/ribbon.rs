@@ -926,7 +926,11 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
         command_button(ui, state, UiCommand::NewTitleBlock);
     });
     group(ui, t!("group-graphics"), |ui| {
-        command_buttons(ui, state, &[UiCommand::VisibilityGraphics, UiCommand::ViewFilters, UiCommand::ViewTemplates]);
+        command_buttons(
+            ui,
+            state,
+            &[UiCommand::VisibilityGraphics, UiCommand::ViewFilters, UiCommand::ViewTemplates, UiCommand::SunSettings],
+        );
     });
     group(ui, t!("group-temporary"), |ui| {
         use UiCommand::*;

@@ -70,54 +70,68 @@ fn clip_segment(a: DVec3, b: DVec3, point: DVec3, normal: DVec3) -> Option<(DVec
     }
 }
 
-fn shade(color: [u8; 3], normal: DVec3, frame: &Frame) -> [u8; 4] {
-    let light = (frame.forward * 0.6 + frame.right * 0.3 - frame.up * 0.5).normalize();
-    let k = 0.62 + 0.38 * (-normal.dot(light)).max(0.0);
+/// A face's fill shaded by a light: the default light fixed to the view
+/// (from behind the viewer, above and to the left) when `sun` is `None`,
+/// else the sun's direction (towards it; the zero vector, a sun below the
+/// horizon, leaves the ambient light only).
+fn shade(color: [u8; 3], normal: DVec3, frame: &Frame, sun: Option<DVec3>) -> [u8; 4] {
+    let k = match sun {
+        None => {
+            let light = (frame.forward * 0.6 + frame.right * 0.3 - frame.up * 0.5).normalize();
+            0.62 + 0.38 * (-normal.dot(light)).max(0.0)
+        }
+        Some(towards) => 0.62 + 0.38 * normal.dot(towards).max(0.0),
+    };
     // Wash colors towards white so linework stays legible.
     let c = |v: u8| ((v as f64 * 0.55 + 255.0 * 0.45) * k).min(255.0) as u8;
     [c(color[0]), c(color[1]), c(color[2]), 255]
 }
 
-/// How a view draws the model: its detail level, its visual style and the
-/// spacing of patterns (cut and surface hatches) in drawing units.
+/// How a view draws the model: its detail level, its visual style, the
+/// spacing of patterns (cut and surface hatches) in drawing units and the
+/// light that shades its faces.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Look {
     pub detail: DetailLevel,
     pub style: VisualStyle,
     pub spacing: f64,
+    /// The sun lighting the faces (shaded and textures styles): the unit
+    /// vector towards it in project coordinates, or the zero vector when it
+    /// is below the horizon (ambient light only). `None`: the default light,
+    /// fixed to the view.
+    pub light: Option<DVec3>,
 }
 
 impl Look {
-    /// The look of `view`.
-    pub fn of(view: &cc_core::View) -> Self {
-        Self { detail: view.detail, style: view.style(), spacing: crate::cut::spacing(view.scale) }
+    /// The look of `view` in `project`: lit by the view's sun when it has
+    /// one ([`cc_core::View::sun`]).
+    pub fn of(project: &Project, view: &cc_core::View) -> Self {
+        let light = project
+            .sun_state(view)
+            .filter(|_| view.kind.takes_sun())
+            .map(|s| if s.above_horizon && s.direction.is_finite() { s.direction } else { DVec3::ZERO });
+        Self { detail: view.detail, style: view.style(), spacing: crate::cut::spacing(view.scale), light }
     }
 
-    /// Shaded, at the medium detail level, patterns as at 1:100.
+    /// Shaded, at the medium detail level, patterns as at 1:100, the default light.
     pub fn plain() -> Self {
-        Self { detail: DetailLevel::Medium, style: VisualStyle::Shaded, spacing: crate::cut::spacing(100) }
+        Self { detail: DetailLevel::Medium, style: VisualStyle::Shaded, spacing: crate::cut::spacing(100), light: None }
     }
 }
 
 /// The fill of a face of `solid` in `style` (none for the wireframe).
-fn face_color(
-    solid: &cc_geom::Solid,
-    face: usize,
-    normal: DVec3,
-    frame: &Frame,
-    style: VisualStyle,
-) -> Option<[u8; 4]> {
+fn face_color(solid: &cc_geom::Solid, face: usize, normal: DVec3, frame: &Frame, look: Look) -> Option<[u8; 4]> {
     // A painted face shows its paint.
     let paint = solid.paint_of(face);
     let color = paint.map_or(solid.color, |p| p.color);
     let appearance = paint.map_or(solid.appearance, |p| p.appearance);
     let transparency = paint.map_or(solid.transparency, |p| p.transparency);
-    let mut c = match style {
+    let mut c = match look.style {
         VisualStyle::Wireframe => return None,
         VisualStyle::HiddenLine => [255, 255, 255, 255],
-        VisualStyle::Shaded => shade(color, normal, frame),
+        VisualStyle::Shaded => shade(color, normal, frame, look.light),
         VisualStyle::ConsistentColors => [color[0], color[1], color[2], 255],
-        VisualStyle::Textures => shade(appearance, normal, frame),
+        VisualStyle::Textures => shade(appearance, normal, frame, look.light),
     };
     // Transparent materials let what is behind show through (never fully: alpha 0 means "no hit").
     c[3] = ((1.0 - transparency.clamp(0.0, 1.0)) * 255.0).round().clamp(40.0, 255.0) as u8;
@@ -227,7 +241,7 @@ pub fn render(
                 normal: face.normal,
                 point: verts[0],
                 pts: verts.iter().map(|v| frame.project(*v)).collect(),
-                color: face_color(solid, face_index, face.normal, frame, style),
+                color: face_color(solid, face_index, face.normal, frame, look),
                 element: solid.element,
                 solid: index,
                 face: face_index,
@@ -563,9 +577,44 @@ fn level_lines(d: &mut Drawing2D, project: &Project, frame: &Frame) {
     }
 }
 
-pub fn elevation(project: &Project, geom: &ModelGeometry, direction: Direction, look: Look) -> Drawing2D {
+/// The frame of an elevation looking `direction`.
+fn elevation_frame(direction: Direction) -> Frame {
     let toward = direction.look();
-    let frame = Frame::looking(DVec3::ZERO, DVec3::new(toward.x, toward.y, 0.0));
+    Frame::looking(DVec3::ZERO, DVec3::new(toward.x, toward.y, 0.0))
+}
+
+/// The frame of a section along `start`..`end` (looking to the right of
+/// it), clipped to `depth` and to the line's ends.
+fn section_frame(start: DVec2, end: DVec2, depth: f64) -> Frame {
+    let dir = (end - start).normalize_or_zero();
+    let toward = -dir.perp();
+    let mut frame = Frame::looking(DVec3::new(start.x, start.y, 0.0), DVec3::new(toward.x, toward.y, 0.0));
+    let xe = frame.project(DVec3::new(end.x, end.y, 0.0)).x;
+    frame.near = Some(0.0);
+    frame.far = Some(depth.max(0.01));
+    frame.crop_x = Some((xe.min(0.0), xe.max(0.0)));
+    frame
+}
+
+/// The frame of a 3D view's 2D form, looking along its camera.
+fn camera_frame(camera: &CameraState) -> Frame {
+    Frame::looking(DVec3::ZERO, camera.forward())
+}
+
+/// The frame through which a projected view (elevation, section, the 2D
+/// form of a 3D view) maps the model onto its drawing, as its generator
+/// builds it; `None` for other views (plans draw plan coordinates as they are).
+pub fn view_frame(view: &cc_core::View) -> Option<Frame> {
+    match &view.kind {
+        cc_core::ViewKind::Elevation { direction } => Some(elevation_frame(*direction)),
+        cc_core::ViewKind::Section { start, end, depth, .. } => Some(section_frame(*start, *end, *depth)),
+        cc_core::ViewKind::ThreeD { camera, .. } => Some(camera_frame(camera)),
+        _ => None,
+    }
+}
+
+pub fn elevation(project: &Project, geom: &ModelGeometry, direction: Direction, look: Look) -> Drawing2D {
+    let frame = elevation_frame(direction);
     let mut d = render(geom, &frame, None, look, &project.fill_patterns);
     level_lines(&mut d, project, &frame);
     d
@@ -579,13 +628,7 @@ pub fn section(
     scale: u32,
     look: Look,
 ) -> Drawing2D {
-    let dir = (end - start).normalize_or_zero();
-    let toward = -dir.perp();
-    let mut frame = Frame::looking(DVec3::new(start.x, start.y, 0.0), DVec3::new(toward.x, toward.y, 0.0));
-    let xe = frame.project(DVec3::new(end.x, end.y, 0.0)).x;
-    frame.near = Some(0.0);
-    frame.far = Some(depth.max(0.01));
-    frame.crop_x = Some((xe.min(0.0), xe.max(0.0)));
+    let frame = section_frame(start, end, depth);
     let cut = CutStyle { project, spacing: crate::cut::spacing(scale) };
     let mut d = render(geom, &frame, Some(cut), look, &project.fill_patterns);
     existing_ground(&mut d, geom, &frame);
@@ -622,13 +665,13 @@ fn existing_ground(d: &mut Drawing2D, geom: &ModelGeometry, frame: &Frame) {
 }
 
 pub fn axonometric(project: &Project, geom: &ModelGeometry, camera: &CameraState, look: Look) -> Drawing2D {
-    render(geom, &Frame::looking(DVec3::ZERO, camera.forward()), None, look, &project.fill_patterns)
+    render(geom, &camera_frame(camera), None, look, &project.fill_patterns)
 }
 
 /// The analytical model seen along the camera: member lines (columns and
 /// beams) and nodes, supports marked with a triangle.
 pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
-    let frame = Frame::looking(DVec3::ZERO, camera.forward());
+    let frame = camera_frame(camera);
     let model = cc_geom::analytical::analytical_model(project, geom);
     let mut d = Drawing2D::default();
     for m in &model.members {
@@ -655,7 +698,7 @@ pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState)
 
 /// The reinforcing bars seen along the camera, tagged with their sets.
 pub fn rebar(geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
-    let frame = Frame::looking(DVec3::ZERO, camera.forward());
+    let frame = camera_frame(camera);
     let mut d = Drawing2D::default();
     for set in geom.rebar.values() {
         for bar in &set.bars {
@@ -764,6 +807,51 @@ mod tests {
         assert!(fills(&textures).iter().all(|c| c[0] > c[1]), "the reddish appearance color");
         // The wireframe is still picked by its lines.
         assert_eq!(wire.hit_test(DVec2::new(0.0, 1.5), 0.05), Some(id));
+    }
+
+    /// A sun lights the faces turned to it: the wall's south face is brighter
+    /// with the sun to the south than to the north, a sun below the horizon
+    /// leaves the ambient light only, and no sun keeps the default light.
+    #[test]
+    fn the_sun_lights_the_faces_turned_to_it() {
+        use cc_core::sun::{SunMode, SunSettings};
+        let (doc, _) = one_wall();
+        let geom = ModelGeometry::build(&doc.project);
+        let fills = |d: &Drawing2D| -> Vec<[u8; 4]> {
+            d.prims
+                .iter()
+                .filter_map(|p| match p {
+                    Prim::Fill { color, .. } => Some(*color),
+                    _ => None,
+                })
+                .collect()
+        };
+        let lit = |light| fills(&elevation(&doc.project, &geom, Direction::South, Look { light, ..Look::plain() }));
+        let brightness =
+            |c: &[[u8; 4]]| c.iter().map(|c| u32::from(c[0]) + u32::from(c[1]) + u32::from(c[2])).sum::<u32>();
+        let south = lit(Some(DVec3::new(0.0, -1.0, 1.0).normalize()));
+        let north = lit(Some(DVec3::new(0.0, 1.0, 1.0).normalize()));
+        let night = lit(Some(DVec3::ZERO));
+        assert!(!south.is_empty() && south.len() == north.len());
+        assert!(brightness(&south) > brightness(&north), "{south:?} vs {north:?}");
+        assert_eq!(north, night, "the face turned away gets the ambient light only");
+        assert_ne!(lit(None), south);
+        // No sun: the default light; a view's sun comes from the project.
+        let mut view = cc_core::View::new(
+            cc_core::ViewId(9999),
+            "E",
+            100,
+            cc_core::ViewKind::Elevation { direction: Direction::South },
+        );
+        assert_eq!(Look::of(&doc.project, &view).light, None);
+        assert_eq!(Look::of(&doc.project, &view), Look { light: None, ..Look::of(&doc.project, &view) });
+        view.sun = Some(SunSettings::default());
+        let state = doc.project.sun_state(&view).unwrap();
+        assert!(state.above_horizon);
+        assert_eq!(Look::of(&doc.project, &view).light, Some(state.direction));
+        view.sun =
+            Some(SunSettings { mode: SunMode::Still { date: Default::default(), time: 0 }, ..Default::default() });
+        assert_eq!(Look::of(&doc.project, &view).light, Some(DVec3::ZERO), "midnight at the equator");
     }
 
     #[test]

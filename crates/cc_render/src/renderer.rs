@@ -1,3 +1,5 @@
+use crate::shadow::{Casters, SunPass, caught};
+use crate::sun::{self, Bounds, Light};
 use crate::textures::{LAYER_SIZE, TextureSet, mip_count};
 use crate::{Highlight, SceneMesh, Shown, Vertex, view_proj};
 use cc_core::CameraState;
@@ -6,17 +8,80 @@ use wgpu::util::DeviceExt;
 
 // egui samples native textures as gamma-encoded values, so the shader encodes sRGB itself.
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const SAMPLES: u32 = 4;
 const BACKGROUND: wgpu::Color = wgpu::Color { r: 0.84, g: 0.88, b: 0.93, a: 1.0 };
+/// Pushes faces slightly back so coplanar edges win the depth test.
+pub(crate) const FACE_BIAS: wgpu::DepthBiasState = wgpu::DepthBiasState { constant: 2, slope_scale: 1.5, clamp: 0.0 };
+const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x2];
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct Uniforms {
-    view_proj: [[f32; 4]; 4],
-    light_dir: [f32; 4],
+pub(crate) struct Uniforms {
+    pub view_proj: [[f32; 4]; 4],
+    pub light_dir: [f32; 4],
     /// x: 1 for unlit faces.
-    style: [f32; 4],
+    pub style: [f32; 4],
+}
+
+/// What sets a pipeline drawing into the frame's targets apart.
+pub(crate) struct PipelineSpec<'a> {
+    pub label: &'a str,
+    pub topology: wgpu::PrimitiveTopology,
+    pub vs: &'a str,
+    pub fs: &'a str,
+    /// It reads the mesh's vertices (else it makes its own).
+    pub vertices: bool,
+    pub cull: Option<wgpu::Face>,
+    pub bias: wgpu::DepthBiasState,
+    /// Blended without writing depth; opaque with `None`.
+    pub blend: Option<wgpu::BlendState>,
+}
+
+/// A pipeline drawing into the frame's multisampled color and depth targets.
+pub(crate) fn frame_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+    spec: PipelineSpec,
+) -> wgpu::RenderPipeline {
+    let vertex_layout = wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<Vertex>() as u64,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &VERTEX_ATTRIBUTES,
+    };
+    let buffers = [Some(vertex_layout)];
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(spec.label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some(spec.vs),
+            compilation_options: Default::default(),
+            buffers: if spec.vertices { &buffers } else { &[] },
+        },
+        primitive: wgpu::PrimitiveState { topology: spec.topology, cull_mode: spec.cull, ..Default::default() },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(spec.blend.is_none()),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: Default::default(),
+            bias: spec.bias,
+        }),
+        multisample: wgpu::MultisampleState { count: SAMPLES, ..Default::default() },
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some(spec.fs),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: COLOR_FORMAT,
+                blend: spec.blend,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 struct Targets {
@@ -56,7 +121,8 @@ fn ranges(shown: Option<&[Range<u32>]>, count: u32) -> Vec<Range<u32>> {
 }
 
 /// Draws a [`SceneMesh`] into an offscreen, multisampled texture, with an
-/// optional [`Highlight`] (the selection) over it.
+/// optional [`Highlight`] (the selection) over it, lit from the camera or by
+/// a sun fixed in the world (see [`Renderer3D::set_light`]).
 pub struct Renderer3D {
     faces: wgpu::RenderPipeline,
     /// Blended faces that do not write depth (transparent materials).
@@ -76,6 +142,17 @@ pub struct Renderer3D {
     drawn: Option<(CameraState, [u32; 2])>,
     /// The mesh's faces are drawn without light.
     unlit: bool,
+    /// The sun, usable (see [`Light::usable`]); `None` lights from the camera.
+    light: Option<Light>,
+    /// The box around the uploaded mesh's vertices.
+    bounds: Option<Bounds>,
+    /// The sun's pipelines and shadow map, made for the first frame it lights.
+    sun: Option<SunPass>,
+    /// Making them failed on this device: frames are lit from the camera.
+    sun_failed: bool,
+    /// The sun's uniforms and shadow map are those of `light` and the
+    /// uploaded mesh (they do not depend on the camera or the size).
+    shadows_current: bool,
 }
 
 impl Renderer3D {
@@ -139,51 +216,13 @@ impl Renderer3D {
         let layers = Self::texture_array(device, 1, 2, 1).create_view(&Self::array_view());
         let bind_group = Self::bind(device, &bind_layout, &uniforms, &layers, &sampler);
 
-        let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Float32x4, 6 => Float32x2];
-        let vertex_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as u64,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &attributes,
+        let pipeline = |label, topology, fs, bias, blend| {
+            let spec = PipelineSpec { label, topology, vs: "vs_main", fs, vertices: true, cull: None, bias, blend };
+            frame_pipeline(device, &layout, &shader, spec)
         };
-        let pipeline =
-            |label: &str, topology, fs: &str, bias: wgpu::DepthBiasState, blend: Option<wgpu::BlendState>| {
-                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some(label),
-                    layout: Some(&layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: Some("vs_main"),
-                        compilation_options: Default::default(),
-                        buffers: &[Some(vertex_layout.clone())],
-                    },
-                    primitive: wgpu::PrimitiveState { topology, cull_mode: None, ..Default::default() },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: DEPTH_FORMAT,
-                        depth_write_enabled: Some(blend.is_none()),
-                        depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                        stencil: Default::default(),
-                        bias,
-                    }),
-                    multisample: wgpu::MultisampleState { count: SAMPLES, ..Default::default() },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: Some(fs),
-                        compilation_options: Default::default(),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: COLOR_FORMAT,
-                            blend,
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    multiview_mask: None,
-                    cache: None,
-                })
-            };
-        // Push faces slightly back so coplanar edges win the depth test.
-        let face_bias = wgpu::DepthBiasState { constant: 2, slope_scale: 1.5, clamp: 0.0 };
         let tri = wgpu::PrimitiveTopology::TriangleList;
-        let faces = pipeline("cc_render faces", tri, "fs_face", face_bias, None);
-        let blended = pipeline("cc_render blended", tri, "fs_face", face_bias, Some(wgpu::BlendState::ALPHA_BLENDING));
+        let faces = pipeline("cc_render faces", tri, "fs_face", FACE_BIAS, None);
+        let blended = pipeline("cc_render blended", tri, "fs_face", FACE_BIAS, Some(wgpu::BlendState::ALPHA_BLENDING));
         let edges = pipeline("cc_render edges", wgpu::PrimitiveTopology::LineList, "fs_edge", Default::default(), None);
         Self {
             faces,
@@ -199,11 +238,27 @@ impl Renderer3D {
             targets: None,
             drawn: None,
             unlit: false,
+            light: None,
+            bounds: None,
+            sun: None,
+            sun_failed: false,
+            shadows_current: false,
+        }
+    }
+
+    /// Light the frames by `light`, a sun fixed in the world, or from the
+    /// camera with `None` (the default). A direction that is zero or not a
+    /// number counts as `None`. The frame is drawn again, and the shadow map
+    /// made again, only when the light changes.
+    pub fn set_light(&mut self, light: Option<Light>) {
+        if sun::replace(&mut self.light, light) {
+            self.drawn = None;
+            self.shadows_current = false;
         }
     }
 
     /// A texture array of `layers` square layers of `size` pixels with `mips` levels.
-    fn texture_array(device: &wgpu::Device, size: u32, layers: u32, mips: u32) -> wgpu::Texture {
+    pub(crate) fn texture_array(device: &wgpu::Device, size: u32, layers: u32, mips: u32) -> wgpu::Texture {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some("cc_render textures"),
             size: wgpu::Extent3d { width: size, height: size, depth_or_array_layers: layers },
@@ -217,7 +272,7 @@ impl Renderer3D {
     }
 
     /// Views of the texture array are arrays even with one layer.
-    fn array_view() -> wgpu::TextureViewDescriptor<'static> {
+    pub(crate) fn array_view() -> wgpu::TextureViewDescriptor<'static> {
         wgpu::TextureViewDescriptor {
             label: Some("cc_render textures"),
             dimension: Some(wgpu::TextureViewDimension::D2Array),
@@ -225,7 +280,7 @@ impl Renderer3D {
         }
     }
 
-    fn bind(
+    pub(crate) fn bind(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         uniforms: &wgpu::Buffer,
@@ -288,6 +343,8 @@ impl Renderer3D {
         self.drawn = None;
         self.unlit = mesh.unlit;
         self.highlight = None;
+        self.bounds = Bounds::of(mesh.vertices.iter().map(|v| v.pos));
+        self.shadows_current = false;
         if mesh.indices.is_empty() && mesh.transparent_indices.is_empty() && mesh.edges.is_empty() {
             self.buffers = None;
             return;
@@ -403,8 +460,8 @@ impl Renderer3D {
         }
     }
 
-    /// Render a frame (unless the last one, with the same mesh, camera and
-    /// size, is still in the targets). Returns the output view and whether it
+    /// Render a frame (unless the last one, with the same mesh, light, camera
+    /// and size, is still in the targets). Returns the output view and whether it
     /// was recreated (callers must then re-register it with egui); `None` if
     /// there are no targets.
     pub fn render(
@@ -430,9 +487,34 @@ impl Renderer3D {
             style: [if self.unlit { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&u));
+        if self.light.is_some() && self.sun.is_none() && !self.sun_failed {
+            // A device that cannot make them keeps the camera's light.
+            self.sun = caught(device, || SunPass::new(device, &self.bind_layout, &self.sampler));
+            self.sun_failed = self.sun.is_none();
+        }
 
         let targets = self.targets.as_ref()?;
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("cc_render") });
+        // The sun's shadow map is drawn again only for a new light or mesh.
+        let sun = match (self.light, self.sun.as_mut()) {
+            (Some(light), Some(sun)) => {
+                if !self.shadows_current {
+                    let casters = self.buffers.as_ref().map(|b| Casters {
+                        vertices: &b.vertices,
+                        indices: &b.indices,
+                        count: b.index_count,
+                    });
+                    sun.update(device, queue, &mut encoder, light, self.bounds, casters);
+                    self.shadows_current = true;
+                }
+                Some(&*sun)
+            }
+            _ => None,
+        };
+        let (faces, blended, edges) = match sun {
+            Some(s) => (&s.faces, &s.blended, &s.edges),
+            None => (&self.faces, &self.blended, &self.edges),
+        };
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cc_render pass"),
@@ -452,13 +534,16 @@ impl Renderer3D {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.bind_group, &[]);
+            if let Some(s) = sun {
+                pass.set_bind_group(1, &s.bind_group, &[]);
+            }
             // The base mesh leaves out what the highlight draws in its place.
             let h = self.highlight.as_ref();
             let shown = h.and_then(|h| h.shown.as_ref());
             if let Some(b) = &self.buffers {
                 let opaque = ranges(shown.map(|s| s.indices.as_slice()), b.index_count);
                 if !opaque.is_empty() {
-                    pass.set_pipeline(&self.faces);
+                    pass.set_pipeline(faces);
                     pass.set_vertex_buffer(0, b.vertices.slice(..));
                     pass.set_index_buffer(b.indices.slice(..), wgpu::IndexFormat::Uint32);
                     for r in opaque {
@@ -469,17 +554,17 @@ impl Renderer3D {
             if let Some(h) = h
                 && h.index_count > 0
             {
-                pass.set_pipeline(&self.faces);
+                pass.set_pipeline(faces);
                 pass.set_vertex_buffer(0, h.vertices.slice(..));
                 pass.set_index_buffer(h.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..h.index_count, 0, 0..1);
             }
             if let Some(b) = &self.buffers {
-                let edges = ranges(shown.map(|s| s.edges.as_slice()), b.edge_count);
-                if !edges.is_empty() {
-                    pass.set_pipeline(&self.edges);
+                let base_edges = ranges(shown.map(|s| s.edges.as_slice()), b.edge_count);
+                if !base_edges.is_empty() {
+                    pass.set_pipeline(edges);
                     pass.set_vertex_buffer(0, b.edges.slice(..));
-                    for r in edges {
+                    for r in base_edges {
                         pass.draw(r, 0..1);
                     }
                 }
@@ -488,15 +573,20 @@ impl Renderer3D {
             if let Some(h) = h
                 && h.edge_count > 0
             {
-                pass.set_pipeline(&self.edges);
+                pass.set_pipeline(edges);
                 pass.set_vertex_buffer(0, h.edges.slice(..));
                 pass.draw(0..h.edge_count, 0..1);
+            }
+            // The ground's shadows over the opaque model, under what shows through glass.
+            if let Some(s) = sun.filter(|s| s.draws_ground) {
+                pass.set_pipeline(&s.ground);
+                pass.draw(0..6, 0..1);
             }
             // Transparent faces last, over everything opaque.
             if let Some(b) = &self.buffers {
                 let transparent = ranges(shown.map(|s| s.transparent.as_slice()), b.transparent_count);
                 if !transparent.is_empty() {
-                    pass.set_pipeline(&self.blended);
+                    pass.set_pipeline(blended);
                     pass.set_vertex_buffer(0, b.vertices.slice(..));
                     pass.set_index_buffer(b.transparent.slice(..), wgpu::IndexFormat::Uint32);
                     for r in transparent {
@@ -597,12 +687,211 @@ mod shader_tests {
     /// made): derivatives in uniform control flow, attributes and bindings.
     #[test]
     fn the_shader_validates() {
-        let module = naga::front::wgsl::parse_str(include_str!("shader.wgsl")).unwrap();
-        let mut validator =
-            naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty());
-        validator.validate(&module).unwrap();
-        for entry in ["vs_main", "fs_face", "fs_edge"] {
-            assert!(module.entry_points.iter().any(|e| e.name == entry), "{entry}");
+        let validate = |source: &str, entries: &[&str]| {
+            let module = naga::front::wgsl::parse_str(source).unwrap();
+            let mut validator =
+                naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty());
+            validator.validate(&module).unwrap();
+            for entry in entries {
+                assert!(module.entry_points.iter().any(|e| e.name == *entry), "{entry}");
+            }
+        };
+        validate(include_str!("shader.wgsl"), &["vs_main", "fs_face", "fs_edge"]);
+        let sun_entries = ["vs_main", "fs_edge", "vs_sun", "fs_sun_face", "vs_shadow", "vs_ground", "fs_ground"];
+        validate(crate::shadow::SUN_SHADER, &sun_entries);
+    }
+}
+
+/// Frames drawn on a GPU. They need an adapter, which CI machines may lack
+/// or have only in software, so they are ignored by default: run them with
+/// `cargo nextest run -p cc_render --run-ignored all` (`WGPU_BACKEND` picks
+/// the backend). Without an adapter they pass without checking anything.
+#[cfg(test)]
+mod gpu_tests {
+    use super::*;
+    use crate::sun::Light;
+    use glam::{DVec3, Vec3};
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let mut future = std::pin::pin!(future);
+        let mut cx = Context::from_waker(Waker::noop());
+        loop {
+            if let Poll::Ready(v) = future.as_mut().poll(&mut cx) {
+                return v;
+            }
+            std::thread::yield_now();
         }
+    }
+
+    fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let adapter = block_on(instance.request_adapter(&Default::default())).ok()?;
+        block_on(adapter.request_device(&Default::default())).ok()
+    }
+
+    /// The faces of the box from `min` to `max`.
+    fn add_box(mesh: &mut SceneMesh, min: Vec3, max: Vec3, color: [f32; 4]) {
+        let corner = |i: usize| {
+            let pick = |bit: usize, a: f32, b: f32| if i & bit == 0 { a } else { b };
+            [pick(1, min.x, max.x), pick(2, min.y, max.y), pick(4, min.z, max.z)]
+        };
+        let faces = [
+            (Vec3::NEG_Z, [0, 2, 3, 1]),
+            (Vec3::Z, [4, 5, 7, 6]),
+            (Vec3::NEG_Y, [0, 1, 5, 4]),
+            (Vec3::Y, [2, 6, 7, 3]),
+            (Vec3::NEG_X, [0, 4, 6, 2]),
+            (Vec3::X, [1, 3, 7, 5]),
+        ];
+        for (normal, quad) in faces {
+            let start = mesh.vertices.len() as u32;
+            mesh.vertices.extend(quad.map(|i| Vertex::plain(corner(i), normal.to_array(), color)));
+            mesh.indices.extend([start, start + 1, start + 2, start, start + 2, start + 3]);
+        }
+    }
+
+    const SIZE: [u32; 2] = [320, 240];
+
+    /// The pixel at world point `p`.
+    fn pixel(rgba: &[u8], camera: &CameraState, p: Vec3) -> [u8; 4] {
+        let ndc = view_proj(camera, SIZE[0] as f32 / SIZE[1] as f32).project_point3(p);
+        let x = ((ndc.x + 1.0) * 0.5 * SIZE[0] as f32) as usize;
+        let y = ((1.0 - ndc.y) * 0.5 * SIZE[1] as f32) as usize;
+        assert!(x < SIZE[0] as usize && y < SIZE[1] as usize, "{p} is off the frame");
+        let at = (y * SIZE[0] as usize + x) * 4;
+        [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]
+    }
+
+    fn brightness(c: [u8; 4]) -> i32 {
+        i32::from(c[0]) + i32::from(c[1]) + i32::from(c[2])
+    }
+
+    /// A tower 2 x 2 x 4 m standing at the origin, on a slab or not.
+    fn scene(slab: bool, unlit: bool) -> SceneMesh {
+        let mut mesh = SceneMesh { unlit, ..Default::default() };
+        if slab {
+            add_box(&mut mesh, Vec3::new(-10.0, -10.0, -0.2), Vec3::new(10.0, 10.0, 0.0), [0.5, 0.5, 0.45, 1.0]);
+        }
+        add_box(&mut mesh, Vec3::ZERO, Vec3::new(2.0, 2.0, 4.0), [0.4, 0.5, 0.7, 1.0]);
+        mesh
+    }
+
+    #[test]
+    #[ignore = "needs a GPU adapter"]
+    fn the_sun_casts_shadows_on_the_model_and_the_ground() {
+        let Some((device, queue)) = gpu() else {
+            eprintln!("no GPU adapter: nothing checked");
+            return;
+        };
+        // From the south, looking down; the sun in the south-west, 40° up:
+        // the tower's shadow falls north-east of it.
+        let camera = CameraState { target: DVec3::new(1.0, 1.0, 0.0), yaw_deg: 0.0, pitch_deg: 60.0, distance: 25.0 };
+        let sun = Light { direction: Vec3::new(-1.0, -1.0, 1.2), shadows: true, ground: Some(0.0) };
+        let (shade, lit) = (Vec3::new(3.5, 3.5, 0.0), Vec3::new(-3.0, 3.0, 0.0));
+        let draw = |mesh: &SceneMesh, light: Option<Light>, camera: &CameraState| {
+            let mut r = Renderer3D::new(&device);
+            r.upload(&device, mesh);
+            r.set_light(light);
+            r.render_to_rgba(&device, &queue, SIZE, camera).unwrap()
+        };
+        for unlit in [false, true] {
+            let slab = scene(true, unlit);
+            let frame = draw(&slab, Some(sun), &camera);
+            let (s, l) = (pixel(&frame, &camera, shade), pixel(&frame, &camera, lit));
+            assert!(brightness(s) + 60 < brightness(l), "unlit {unlit}: {s:?} in shadow, {l:?} lit");
+            // The ground at the slab's top stays under it: the slab's shadow is not darkened twice.
+            let bare = draw(&slab, Some(Light { ground: None, ..sun }), &camera);
+            let b = pixel(&bare, &camera, shade);
+            assert!((brightness(b) - brightness(s)).abs() <= 3, "{b:?} without the ground, {s:?} with it");
+            // No sun: as the renderer always drew it, whatever light it had before.
+            let before = draw(&slab, None, &camera);
+            let mut r = Renderer3D::new(&device);
+            r.upload(&device, &slab);
+            r.set_light(Some(sun));
+            assert_ne!(r.render_to_rgba(&device, &queue, SIZE, &camera).unwrap(), before);
+            r.set_light(None);
+            assert_eq!(r.render_to_rgba(&device, &queue, SIZE, &camera).unwrap(), before);
+            // Below the horizon: no shadows, darker than in the sun.
+            let night = draw(&slab, Some(Light { direction: Vec3::new(-1.0, -1.0, -0.5), ..sun }), &camera);
+            let (ns, nl) = (pixel(&night, &camera, shade), pixel(&night, &camera, lit));
+            assert!((brightness(ns) - brightness(nl)).abs() <= 3, "{ns:?} {nl:?}");
+            assert!(unlit || brightness(nl) + 30 < brightness(l), "{nl:?} at night, {l:?} by day");
+        }
+        // The ground alone catches the shadow; where lit it shows the background.
+        let tower = scene(false, false);
+        let frame = draw(&tower, Some(sun), &camera);
+        let background = [frame[0], frame[1], frame[2], frame[3]];
+        assert_eq!(pixel(&frame, &camera, lit), background);
+        let s = pixel(&frame, &camera, shade);
+        assert!(brightness(s) + 100 < brightness(background), "{s:?}");
+        // Seen from below, it is not drawn.
+        let below = CameraState { pitch_deg: -30.0, ..camera };
+        assert_eq!(draw(&tower, Some(sun), &below), draw(&tower, Some(Light { ground: None, ..sun }), &below));
+    }
+
+    #[test]
+    #[ignore = "needs a GPU adapter"]
+    fn only_a_new_light_redraws_the_frame() {
+        let Some((device, queue)) = gpu() else {
+            eprintln!("no GPU adapter: nothing checked");
+            return;
+        };
+        let camera = CameraState::default();
+        let sun = Light { direction: Vec3::new(0.3, -0.5, 0.8), shadows: true, ground: Some(0.0) };
+        let mut r = Renderer3D::new(&device);
+        r.upload(&device, &scene(true, false));
+        r.render(&device, &queue, SIZE, &camera);
+        assert!(r.drawn.is_some() && !r.shadows_current);
+        r.set_light(None);
+        assert!(r.drawn.is_some());
+        r.set_light(Some(sun));
+        assert!(r.drawn.is_none());
+        r.render(&device, &queue, SIZE, &camera);
+        assert!(r.drawn.is_some() && r.shadows_current);
+        // The same sun (its direction as long or twice as long) keeps the frame and the shadow map.
+        r.set_light(Some(sun));
+        r.set_light(Some(Light { direction: sun.direction * 2.0, ..sun }));
+        assert!(r.drawn.is_some() && r.shadows_current);
+        // The camera moving keeps the shadow map.
+        let turned = CameraState { yaw_deg: camera.yaw_deg + 10.0, ..camera };
+        r.render(&device, &queue, SIZE, &turned);
+        assert!(r.drawn == Some((turned, SIZE)) && r.shadows_current);
+        r.set_light(Some(Light { ground: None, ..sun }));
+        assert!(r.drawn.is_none() && !r.shadows_current);
+        // A new mesh makes the shadow map again.
+        r.render(&device, &queue, SIZE, &camera);
+        r.upload(&device, &scene(false, false));
+        assert!(r.drawn.is_none() && !r.shadows_current);
+    }
+
+    /// A sun that casts no shadows makes no shadow map of its size; the
+    /// first one that does makes it, and it lights the same as a fresh one.
+    #[test]
+    #[ignore = "needs a GPU adapter"]
+    fn the_shadow_map_is_made_only_for_shadows() {
+        let Some((device, queue)) = gpu() else {
+            eprintln!("no GPU adapter: nothing checked");
+            return;
+        };
+        let camera = CameraState { target: DVec3::new(1.0, 1.0, 0.0), yaw_deg: 0.0, pitch_deg: 60.0, distance: 25.0 };
+        let sun = Light { direction: Vec3::new(-1.0, -1.0, 1.2), shadows: true, ground: Some(0.0) };
+        let mut r = Renderer3D::new(&device);
+        r.upload(&device, &scene(true, false));
+        r.set_light(Some(Light { shadows: false, ..sun }));
+        r.render(&device, &queue, SIZE, &camera);
+        assert_eq!(r.sun.as_ref().map(|s| s.map_size()), Some(1));
+        // Below the horizon a shadow-casting sun casts none either.
+        r.set_light(Some(Light { direction: Vec3::new(-1.0, -1.0, -0.5), ..sun }));
+        r.render(&device, &queue, SIZE, &camera);
+        assert_eq!(r.sun.as_ref().map(|s| s.map_size()), Some(1));
+        r.set_light(Some(sun));
+        let grown = r.render_to_rgba(&device, &queue, SIZE, &camera).unwrap();
+        assert!(r.sun.as_ref().is_some_and(|s| s.map_size() > 1));
+        let mut fresh = Renderer3D::new(&device);
+        fresh.upload(&device, &scene(true, false));
+        fresh.set_light(Some(sun));
+        assert_eq!(fresh.render_to_rgba(&device, &queue, SIZE, &camera).unwrap(), grown);
     }
 }

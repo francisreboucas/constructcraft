@@ -213,6 +213,10 @@ pub struct Drawing2D {
     /// under a plan ([`cc_core::Underlay`]): halftone, with no element, not
     /// picked or snapped to.
     pub underlay: usize,
+    /// How many of the last `prims` are an overlay drawn over the view (the
+    /// sun path diagram, [`crate::sun_path`]): with no element, not picked
+    /// or snapped to, but part of the extents to fit the view to.
+    pub overlay: usize,
     /// The marks of sections in a plan: picked, moved and flipped there.
     pub sections: Vec<SectionHandle>,
     /// The marks of callouts drawn in the view: picked, moved and resized there.
@@ -266,14 +270,21 @@ pub struct TagHandle {
 }
 
 impl Drawing2D {
-    /// The primitives of the view itself, without its underlay.
+    /// The primitives of the view itself, without its underlay and its overlay.
     pub fn own_prims(&self) -> &[Prim] {
-        self.prims.get(self.underlay..).unwrap_or_default()
+        let end = self.prims.len().saturating_sub(self.overlay);
+        self.prims.get(self.underlay..end).unwrap_or_default()
+    }
+
+    /// The overlay drawn over the view (see [`Self::overlay`]).
+    pub fn overlay_prims(&self) -> &[Prim] {
+        self.prims.get(self.prims.len().saturating_sub(self.overlay)..).unwrap_or_default()
     }
 
     /// The drawing without its underlay (printed when the view says so).
     pub fn without_underlay(&self) -> Drawing2D {
-        Drawing2D { prims: self.own_prims().to_vec(), underlay: 0, ..self.clone() }
+        let prims = self.prims.get(self.underlay..).unwrap_or_default().to_vec();
+        Drawing2D { prims, underlay: 0, ..self.clone() }
     }
 
     /// The section mark at `p` (the last drawn on top), if any.
@@ -417,12 +428,15 @@ impl Drawing2D {
     }
 
     /// The extents to fit the view to: [`bounds`](Self::bounds), or only the
-    /// elements' geometry with `fit_elements` (all of it when there is none).
+    /// elements' geometry and the overlay with `fit_elements` (all of it
+    /// when there is none).
     pub fn fit_bounds(&self) -> Option<(DVec2, DVec2)> {
         if !self.fit_elements {
             return self.bounds();
         }
-        let mut it = self.prims.iter().filter(|p| p.element().is_some()).flat_map(|p| match p {
+        let overlay = self.prims.len().saturating_sub(self.overlay);
+        let fitted = |(i, p): &(usize, &Prim)| p.element().is_some() || *i >= overlay;
+        let mut it = self.prims.iter().enumerate().filter(fitted).flat_map(|(_, p)| match p {
             Prim::Line { a, b, .. } => vec![*a, *b],
             Prim::Fill { pts, .. } => pts.clone(),
             Prim::Text { pos, .. } => vec![*pos],

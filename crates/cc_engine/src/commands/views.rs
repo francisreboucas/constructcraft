@@ -243,7 +243,7 @@ fn capitalized(s: &str) -> String {
 /// Change a view: name, scale, phase and phase filter, and its `params` as
 /// `view_get` shows them (merged: cut height, section depth, legend types,
 /// schedule fields, sort, filter and totals, sheet number and size,
-/// viewport positions…) and the crop.
+/// viewport positions…), the crop and the sun.
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ViewSet {
@@ -282,6 +282,12 @@ pub struct ViewSet {
     /// it moves that callout.
     #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
     pub crop: Option<Option<[Point; 2]>>,
+    /// The view's sun (plans, ceiling plans, 3D views, elevations and
+    /// sections): the fields to change, shaped like `sun` in `view_get`
+    /// (a view without a sun starts from a still sun on 2026-06-21 at
+    /// 10:00), `{"preset": name}` to take a preset, or `null` to remove it.
+    #[serde(default, deserialize_with = "refs::nullable", skip_serializing_if = "Option::is_none")]
+    pub sun: Option<Option<super::sun::SunArg>>,
 }
 
 impl Command for ViewSet {
@@ -339,6 +345,12 @@ impl Command for ViewSet {
         if crop == Some(None) && view.callout.is_some() {
             return Err(EngineError::invalid(t!("msg-callout-needs-rect")));
         }
+        let sun = match &self.sun {
+            Some(_) if !view.kind.takes_sun() => return Err(EngineError::invalid(t!("msg-sun-view"))),
+            Some(Some(arg)) => Some(Some(super::sun::apply_sun(p, view.sun.as_ref(), arg)?)),
+            Some(None) => Some(None),
+            None => None,
+        };
         // Properties the view's template controls stay as the template has them.
         if let Some(t) = view.template.and_then(|t| p.template(t)) {
             let mut new = view.clone();
@@ -392,6 +404,9 @@ impl Command for ViewSet {
                 }
                 Some(c) => v.crop = c,
                 None => {}
+            }
+            if let Some(sun) = sun {
+                v.sun = sun;
             }
             Ok(())
         })?;

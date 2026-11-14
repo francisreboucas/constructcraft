@@ -124,28 +124,35 @@ fn pattern(kind: f32, uv: vec2<f32>, w: f32) -> f32 {
     return c;
 }
 
-@fragment
-fn fs_face(i: VsOut) -> @location(0) vec4<f32> {
-    let n = normalize(i.normal);
+// A face's color before light: its own, its texture's, and its surface
+// patterns over it. Call it in uniform control flow (derivatives, sampling).
+fn surface(color: vec3<f32>, plane: vec2<f32>, fg: vec4<f32>, bg: vec4<f32>, tex: vec4<f32>) -> vec3<f32> {
     // The face's own plane coordinates, from its vertices: the shading
     // normal turns across a curved surface, so it cannot pick them.
-    let uv = i.plane;
+    let uv = plane;
     // Derivatives in uniform control flow, before any branch.
     let fw = fwidth(uv);
     let w = max(max(fw.x, fw.y), 1e-5);
     // Sampled in uniform control flow too; used only where the face has a texture.
-    let layer = max(i32(round(i.tex.z)) - 1, 0);
-    let texel = textureSample(tex_layers, tex_sampler, i.tex.xy, layer);
-    var base = i.color.rgb;
-    if i.tex.z > 0.5 {
+    let layer = max(i32(round(tex.z)) - 1, 0);
+    let texel = textureSample(tex_layers, tex_sampler, tex.xy, layer);
+    var base = color;
+    if tex.z > 0.5 {
         base = texel.rgb;
     }
-    if i.bg.w > 0.5 {
-        base = mix(base, i.bg.rgb, pattern(i.bg.w, uv, w));
+    if bg.w > 0.5 {
+        base = mix(base, bg.rgb, pattern(bg.w, uv, w));
     }
-    if i.fg.w > 0.5 {
-        base = mix(base, i.fg.rgb, pattern(i.fg.w, uv, w));
+    if fg.w > 0.5 {
+        base = mix(base, fg.rgb, pattern(fg.w, uv, w));
     }
+    return base;
+}
+
+@fragment
+fn fs_face(i: VsOut) -> @location(0) vec4<f32> {
+    let n = normalize(i.normal);
+    let base = surface(i.color.rgb, i.plane, i.fg, i.bg, i.tex);
     let diffuse = max(dot(n, normalize(u.light_dir.xyz)), 0.0);
     // Hemispheric ambient keeps faces turned away from the sun readable.
     let sky = 0.5 + 0.5 * n.z;

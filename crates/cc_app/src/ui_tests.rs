@@ -3031,6 +3031,12 @@ fn every_dialog_keeps_its_body_inside() {
     for section in [Section::General, Section::Interface, Section::FileLocations, Section::Saving, Section::Shortcuts] {
         opens.push((format!("preferences {section:?}"), Box::new(move |s| crate::preferences::open(s, section))));
     }
+    // Sun Settings in each kind of sun, and in a 3D view (shadows enabled).
+    for (mode, three_d) in
+        [("still", false), ("single_day", false), ("multi_day", false), ("lighting", false), ("multi_day", true)]
+    {
+        opens.push((format!("sun settings {mode} 3d={three_d}"), Box::new(move |s| open_sun_dialog(s, mode, three_d))));
+    }
     // The schedule definition, a page at a time, with a filter, sorting levels and a column format to lay out.
     for tab in crate::schedule_ui::Tab::ALL {
         opens.push((
@@ -4503,4 +4509,246 @@ fn typed_numbers_are_kept_until_the_field_is_left() {
     harness.key_press(egui::Key::Enter);
     harness.run();
     assert!(width(harness.state()).is_some_and(|w| (w - 0.95).abs() < 1e-9), "{:?}", width(harness.state()));
+}
+
+/// The first view of the sample that `test` accepts.
+fn sample_view(state: &AppState, test: impl Fn(&cc_core::View) -> bool) -> cc_core::ViewId {
+    state.project().views.values().find(|v| test(v)).map(|v| v.id).expect("the sample has such a view")
+}
+
+/// Make a plan (or a 3D view) of the sample active, give it a sun of the
+/// kind `mode` and open Sun Settings on it.
+fn open_sun_dialog(state: &mut AppState, mode: &str, three_d: bool) {
+    let view = if three_d {
+        sample_view(state, |v| matches!(v.kind, cc_core::ViewKind::ThreeD { .. }))
+    } else {
+        sample_view(state, cc_core::View::is_plan)
+    };
+    state.active_view = Some(view);
+    let sun = cc_engine::commands::sun::SunArg { mode: Some(mode.to_string()), ..Default::default() };
+    let set = cc_engine::commands::views::ViewSet {
+        view: cc_engine::Ref::Id(view.0),
+        sun: Some(Some(sun)),
+        ..Default::default()
+    };
+    state.session.run(set).unwrap();
+    crate::sun_ui::open(state);
+    assert!(state.dialogs.sun.is_some());
+}
+
+fn sun_harness(state: AppState) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(1400.0, 1000.0), egui::Theme::Light, |ui, state| {
+        crate::dialogs::show(ui.ctx(), state)
+    })
+}
+
+/// Sun Settings on a plan without a sun gives it one; Cancel takes it away
+/// with no undo step left, OK keeps it as one step, and *Remove Sun* clears it.
+#[test]
+fn sun_settings_give_a_view_a_sun_that_cancel_takes_away() {
+    use crate::commands::UiCommand;
+    let mut state = sample_state();
+    let plan = sample_view(&state, cc_core::View::is_plan);
+    state.active_view = Some(plan);
+    assert!(state.project().view(plan).unwrap().sun.is_none());
+    let depth = state.session.doc.undo_depth();
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::SunSettings);
+    assert!(state.dialogs.sun.is_some());
+    assert_eq!(state.project().view(plan).unwrap().sun, Some(cc_core::sun::SunSettings::default()));
+    let mut harness = sun_harness(state);
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.sun.is_none());
+    assert!(state.project().view(plan).unwrap().sun.is_none());
+    assert_eq!(state.session.doc.undo_depth(), depth);
+
+    // OK keeps the sun and every change made, as one undo step.
+    crate::commands::run(harness.state_mut(), &egui::Context::default(), UiCommand::SunSettings);
+    harness.run();
+    harness.get_by_label(&t!("sun-preset-december-solstice")).click();
+    harness.run();
+    harness.get_by_label(&t!("sun-show-path")).click();
+    harness.run();
+    harness.get_by_label(&t!("action-ok")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.sun.is_none());
+    let sun = state.project().view(plan).unwrap().sun.clone().unwrap();
+    assert!(!sun.show_path);
+    assert!(matches!(sun.mode, cc_core::sun::SunMode::Still { date, time: 720 } if date.iso() == "2026-12-21"));
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+
+    // Remove Sun clears it and closes, keeping that.
+    crate::commands::run(harness.state_mut(), &egui::Context::default(), UiCommand::SunSettings);
+    harness.run();
+    harness.get_by_label(&t!("sun-remove")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.sun.is_none());
+    assert!(state.project().view(plan).unwrap().sun.is_none());
+}
+
+/// *Remove Sun* on a view that had none changes nothing: no undo step and
+/// the document as it was. On a view with a sun it is one undo step.
+#[test]
+fn removing_a_sun_the_view_did_not_have_changes_nothing() {
+    use crate::commands::UiCommand;
+    let mut state = sample_state();
+    let plan = sample_view(&state, cc_core::View::is_plan);
+    state.active_view = Some(plan);
+    let (depth, before, dirty) =
+        (state.session.doc.undo_depth(), state.project().clone(), state.session.doc.is_dirty());
+    crate::commands::run(&mut state, &egui::Context::default(), UiCommand::SunSettings);
+    let mut harness = sun_harness(state);
+    harness.get_by_label(&t!("sun-remove")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.dialogs.sun.is_none());
+    assert_eq!(state.session.doc.undo_depth(), depth);
+    assert!(*state.project() == before, "the project is as it was");
+    assert_eq!(state.session.doc.is_dirty(), dirty);
+
+    // With a sun: removing it is one step, which undo takes back.
+    let set = cc_engine::commands::views::ViewSet {
+        view: cc_engine::Ref::Id(plan.0),
+        sun: Some(Some(Default::default())),
+        ..Default::default()
+    };
+    harness.state_mut().session.run(set).unwrap();
+    let depth = harness.state().session.doc.undo_depth();
+    crate::commands::run(harness.state_mut(), &egui::Context::default(), UiCommand::SunSettings);
+    harness.run();
+    harness.get_by_label(&t!("sun-remove")).click();
+    harness.run();
+    let state = harness.state_mut();
+    assert!(state.project().view(plan).unwrap().sun.is_none());
+    assert_eq!(state.session.doc.undo_depth(), depth + 1);
+    state.session.doc.undo();
+    assert!(state.project().view(plan).unwrap().sun.is_some());
+}
+
+/// Switching to lighting and back keeps the date; a built-in preset applies
+/// its mode; a preset saved in the dialog goes away on Cancel.
+#[test]
+fn sun_settings_switch_modes_apply_and_save_presets() {
+    use crate::i18n::tr;
+    use cc_core::sun::SunMode;
+    let mut state = sample_state();
+    open_sun_dialog(&mut state, "still", false);
+    let plan = state.active_view.unwrap();
+    let mode = |h: &Harness<'static, AppState>| h.state().project().view(plan).unwrap().sun.clone().unwrap().mode;
+    let mut harness = sun_harness(state);
+    harness.get_by_label(&t!("sun-preset-march-equinox")).click();
+    harness.run();
+    assert!(matches!(mode(&harness), SunMode::Still { date, time: 720 } if date.iso() == "2026-03-20"));
+    harness.get_by_label(&tr(SunMode::from_name("lighting").unwrap().key())).click();
+    harness.run();
+    assert!(matches!(mode(&harness), SunMode::Lighting { .. }));
+    harness.get_by_label(&t!("sun-preset-light-left")).click();
+    harness.run();
+    assert!(matches!(mode(&harness), SunMode::Lighting { azimuth, .. } if azimuth == 225.0));
+    harness.get_by_label(&tr(SunMode::from_name("still").unwrap().key())).click();
+    harness.run();
+    harness.get_by_label(&tr(SunMode::from_name("single_day").unwrap().key())).click();
+    harness.run();
+    assert!(matches!(mode(&harness), SunMode::SingleDay { date, .. } if date.iso() == "2026-03-20"));
+
+    // Save the single-day sun as a preset, by name.
+    harness.get_by_label(&t!("sun-preset-save")).click();
+    harness.run();
+    harness.get_by_role(Role::TextInput).type_text("Afternoon study");
+    harness.run();
+    harness.get_by_label(&t!("sun-preset-store")).click();
+    harness.run();
+    let presets = &harness.state().project().sun_presets;
+    assert_eq!(presets.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Afternoon study"]);
+    assert!(harness.query_by_label("Afternoon study").is_some(), "listed with the single-day presets");
+    // The same name again is refused inline, with the engine's reason.
+    harness.get_by_label(&t!("sun-preset-save")).click();
+    harness.run();
+    harness.get_by_role(Role::TextInput).type_text("Afternoon study");
+    harness.run();
+    harness.get_by_label(&t!("sun-preset-store")).click();
+    harness.run();
+    assert_eq!(harness.state().project().sun_presets.len(), 1);
+    assert!(harness.state().dialogs.sun.is_some());
+    assert!(harness.query_by_label(&t!("msg-sun-preset-exists", "name" => "Afternoon study")).is_some());
+    harness.get_by_label(&t!("action-cancel")).click();
+    harness.run();
+    let state = harness.state();
+    assert!(state.project().sun_presets.is_empty(), "Cancel undoes the saved preset");
+    assert!(state.project().view(plan).unwrap().sun.as_ref().is_some_and(|s| matches!(s.mode, SunMode::Still { .. })));
+}
+
+/// The dialog's rows fit with the largest text size, in every kind of sun.
+#[test]
+fn sun_settings_fit_large_text() {
+    for mode in cc_core::sun::SunMode::NAMES {
+        let mut state = sample_state();
+        open_sun_dialog(&mut state, mode, mode == "multi_day");
+        let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| {
+            crate::theme::set_font_scale(ui.ctx(), *crate::theme::FONT_SCALE_RANGE.end());
+            crate::dialogs::show(ui.ctx(), state)
+        };
+        let mut harness = themed_harness(state, egui::vec2(1500.0, 1000.0), egui::Theme::Light, draw);
+        for _ in 0..6 {
+            harness.step();
+        }
+        assert!(harness.state().dialogs.sun.is_some(), "{mode}");
+    }
+}
+
+/// Sun Settings is unavailable, with its reason, outside plans, 3D views,
+/// elevations and sections.
+#[test]
+fn sun_settings_need_a_view_that_takes_a_sun() {
+    use crate::commands::UiCommand;
+    let mut state = sample_state();
+    let why = Some(t!("why-sun-view"));
+    let schedule = sample_view(&state, |v| matches!(v.kind, cc_core::ViewKind::Schedule { .. }));
+    let sheet = sample_view(&state, |v| matches!(v.kind, cc_core::ViewKind::Sheet { .. }));
+    let plan = sample_view(&state, cc_core::View::is_plan);
+    state.active_view = None;
+    assert_eq!(UiCommand::SunSettings.unavailable(&state), why);
+    for (view, expected) in [(schedule, why.clone()), (sheet, why.clone()), (plan, None)] {
+        state.active_view = Some(view);
+        assert_eq!(UiCommand::SunSettings.unavailable(&state), expected);
+    }
+    assert_eq!(UiCommand::SunSettings.engine(), Some("view_set"));
+}
+
+/// A plan's properties show its sun: the *Sun* button opens the dialog,
+/// and the sun path row turns the diagram off.
+#[test]
+fn view_properties_show_the_sun() {
+    use crate::i18n::tr;
+    let mut state = sample_state();
+    let plan = sample_view(&state, cc_core::View::is_plan);
+    state.active_view = Some(plan);
+    let draw: fn(&mut egui::Ui, &mut AppState) = |ui, state| {
+        crate::properties::show(ui, state);
+        crate::dialogs::show(ui.ctx(), state);
+    };
+    // Without a sun: the button says so, and no sun rows.
+    let harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, draw);
+    assert!(harness.query_by_label(&t!("sun-none")).is_some());
+    assert!(harness.query_by_label(&t!("prop-sun-path")).is_none());
+    let mut state = harness.into_state();
+    let set = cc_engine::commands::views::ViewSet {
+        view: cc_engine::Ref::Id(plan.0),
+        sun: Some(Some(Default::default())),
+        ..Default::default()
+    };
+    state.session.run(set).unwrap();
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, draw);
+    let still = tr(cc_core::sun::SunMode::default().key());
+    assert!(harness.query_by_label(&still).is_some());
+    assert!(harness.query_by_label(&t!("sun-shadows")).is_none(), "shadows only in 3D views");
+    harness.get_by_label(&t!("prop-sun-path")).click();
+    harness.run();
+    assert!(!harness.state().project().view(plan).unwrap().sun.as_ref().unwrap().show_path);
+    harness.get_by_label(&still).click();
+    harness.run();
+    assert!(harness.state().dialogs.sun.is_some());
 }

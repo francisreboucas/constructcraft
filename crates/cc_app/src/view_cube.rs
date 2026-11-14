@@ -100,8 +100,9 @@ fn inside(poly: &[Pos2], p: Pos2) -> bool {
     true
 }
 
-/// Show the cube in the top-right corner of `view`.
-pub fn show(ui: &mut Ui, view: Rect, cam: &CameraState) -> CubeAction {
+/// Show the cube in the top-right corner of `view`, its compass turned to
+/// `north` (true north in plan, a unit vector; project +Y without a site).
+pub fn show(ui: &mut Ui, view: Rect, cam: &CameraState, north: glam::DVec2) -> CubeAction {
     let mut action = CubeAction::default();
     let center = view.right_top() + vec2(-62.0, 66.0);
     let (right, up, fwd) = basis(cam);
@@ -151,12 +152,9 @@ pub fn show(ui: &mut Ui, view: Rect, cam: &CameraState) -> CubeAction {
         if ring_hovered || (resp.dragged() && ring_hovered) { PALETTE.accent } else { PALETTE.border_strong };
     painter.add(egui::Shape::closed_line(ring.clone(), Stroke::new(5.0, PALETTE.panel.gamma_multiply(0.9))));
     painter.add(egui::Shape::closed_line(ring.clone(), Stroke::new(1.2, ring_color)));
-    for (dir, key) in [
-        (glam::DVec2::Y, "axis-north"),
-        (glam::DVec2::NEG_Y, "axis-south"),
-        (glam::DVec2::X, "axis-east"),
-        (glam::DVec2::NEG_X, "axis-west"),
-    ] {
+    let north = north.try_normalize().unwrap_or(glam::DVec2::Y);
+    let east = glam::DVec2::new(north.y, -north.x);
+    for (dir, key) in [(north, "axis-north"), (-north, "axis-south"), (east, "axis-east"), (-east, "axis-west")] {
         let p = to(DVec3::from((dir * RING, -1.0)));
         let bold = key == "axis-north";
         painter.circle_filled(p, 7.0, PALETTE.panel);

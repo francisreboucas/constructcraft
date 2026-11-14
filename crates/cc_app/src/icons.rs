@@ -174,6 +174,7 @@ pub enum Icon {
     Visibility,
     Filter,
     ViewTemplate,
+    Sun,
     Hide,
     Isolate,
     OverrideGraphics,
@@ -199,7 +200,7 @@ pub enum Icon {
 
 impl Icon {
     #[cfg(test)]
-    pub const ALL: [Icon; 184] = [
+    pub const ALL: [Icon; 185] = [
         Icon::New,
         Icon::Open,
         Icon::Save,
@@ -363,6 +364,7 @@ impl Icon {
         Icon::Visibility,
         Icon::Filter,
         Icon::ViewTemplate,
+        Icon::Sun,
         Icon::Hide,
         Icon::Isolate,
         Icon::OverrideGraphics,
@@ -552,6 +554,7 @@ impl Icon {
             Icon::Visibility => include_str!("../../../assets/icons/ui/visibility.svg"),
             Icon::Filter => include_str!("../../../assets/icons/ui/filter.svg"),
             Icon::ViewTemplate => include_str!("../../../assets/icons/ui/view-template.svg"),
+            Icon::Sun => include_str!("../../../assets/icons/ui/sun.svg"),
             Icon::Hide => include_str!("../../../assets/icons/ui/hide.svg"),
             Icon::Isolate => include_str!("../../../assets/icons/ui/isolate.svg"),
             Icon::OverrideGraphics => include_str!("../../../assets/icons/ui/override-graphics.svg"),

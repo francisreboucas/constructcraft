@@ -35,6 +35,8 @@ pub struct View3DState {
     select_start: Option<egui::Pos2>,
     /// Snap points and previews of the modify tools.
     pub(crate) picks: crate::modify3d::PickCache,
+    /// The view's sun: the light and the sun path drawn over the image.
+    sun: crate::sun_overlay::SunView,
 }
 
 /// Cameras kept for "previous" and "next".
@@ -73,6 +75,7 @@ impl View3DState {
             region_start: None,
             select_start: None,
             picks: Default::default(),
+            sun: Default::default(),
         }
     }
 
@@ -567,6 +570,16 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
     };
     let mut gpu = Gpu { renderer: &mut *renderer, device: &rs.device, queue: &rs.queue };
     v3.scene.update(&mut state.session, view_id, mode, &state.selection, &mut gpu);
+    // The view's sun (else the camera's light), as the live camera sees it.
+    let light = match state.session.doc.project.view(view_id) {
+        Some(view) => {
+            let (project, geom, revision) =
+                (&state.session.doc.project, state.session.geom_for(view_id), state.session.doc.revision());
+            v3.sun.update(project, geom, view, revision, &v3.camera)
+        }
+        None => None,
+    };
+    renderer.set_light(light);
     let ppp = ui.ctx().pixels_per_point();
     let size = [(rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32];
     let Some((texture_view, recreated)) = renderer.render(&rs.device, &rs.queue, size, &v3.camera) else { return };
@@ -590,6 +603,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         painter.image(tex, rect, uv, egui::Color32::WHITE);
     }
+    // The sun path over the image, under the selection box, the cube and the tools.
+    v3.sun.paint(&painter, &crate::modify3d::Frame::new(rect, v3.camera));
     if let Some(start) = v3.select_start {
         let cur = resp.interact_pointer_pos().or(resp.hover_pos()).unwrap_or(start);
         crate::tools::select_box(&painter, start, cur);
@@ -617,7 +632,8 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
             state.selection.extend(ids);
         }
     }
-    let cube = crate::view_cube::show(ui, rect, &v3.camera);
+    let north = state.session.doc.project.info.site.as_ref().map_or(glam::DVec2::Y, |s| s.north());
+    let cube = crate::view_cube::show(ui, rect, &v3.camera, north);
     if cube.look_from.is_some() || cube.home {
         v3.remember();
     }

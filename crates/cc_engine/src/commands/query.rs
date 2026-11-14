@@ -553,6 +553,7 @@ pub(crate) fn view_json(s: &Session, id: ViewId) -> Option<Value> {
         "design_options": super::design_options::view_options_json(s.project(), v),
         "crop": crop,
         "callout": callout,
+        "sun": super::sun::view_sun_json(s.project(), v),
     }))
 }
 
@@ -583,7 +584,10 @@ impl Command for ViewsList {
 
 /// A view with all its parameters (`params`, editable with `view_set`), its
 /// `scale` denominator and `scale_text`, the scale as the project writes it
-/// (`1:50`, or `1/4" = 1'-0"` in imperial projects).
+/// (`1:50`, or `1/4" = 1'-0"` in imperial projects), and its `sun`: null,
+/// or the settings `view_set` takes plus `derived` (azimuth and altitude,
+/// `above_horizon`, the current frame's `date` and `time`, `sunrise` and
+/// `sunset`, the number of `frames` and `site_known`).
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewGet {

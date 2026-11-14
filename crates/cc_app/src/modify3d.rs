@@ -97,6 +97,33 @@ impl Frame {
         let r = self.rect;
         Some(Pos2::new(r.left() + (x + 1.0) * 0.5 * r.width(), r.top() + (1.0 - y) * 0.5 * r.height()))
     }
+
+    /// The part of the segment `a`–`b` in front of the camera's near plane,
+    /// on screen: an end behind it moves to where the segment crosses it
+    /// (`None` when the whole segment is behind), so a line passing by the
+    /// eye is not flung across the screen.
+    pub fn segment(&self, a: DVec3, b: DVec3) -> Option<(Pos2, Pos2)> {
+        let clip = |p: DVec3| self.view_proj * Vec4::new(p.x as f32, p.y as f32, p.z as f32, 1.0);
+        let (mut ca, mut cb) = (clip(a), clip(b));
+        if !(ca.is_finite() && cb.is_finite()) || (ca.z < 0.0 && cb.z < 0.0) {
+            return None;
+        }
+        // Clip space depth is 0 on the near plane (and w is the near distance there).
+        if ca.z < 0.0 {
+            ca = ca + (cb - ca) * (ca.z / (ca.z - cb.z));
+        } else if cb.z < 0.0 {
+            cb = cb + (ca - cb) * (cb.z / (cb.z - ca.z));
+        }
+        let r = self.rect;
+        let to_screen = |c: Vec4| {
+            (c.w > 1e-6).then(|| {
+                let (x, y) = (c.x / c.w, c.y / c.w);
+                Pos2::new(r.left() + (x + 1.0) * 0.5 * r.width(), r.top() + (1.0 - y) * 0.5 * r.height())
+            })
+        };
+        let (pa, pb) = (to_screen(ca)?, to_screen(cb)?);
+        (pa.x.is_finite() && pa.y.is_finite() && pb.x.is_finite() && pb.y.is_finite()).then_some((pa, pb))
+    }
 }
 
 /// Where `ray` meets the horizontal plane at height `z` (in front of its origin).
