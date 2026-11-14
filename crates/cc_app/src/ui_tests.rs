@@ -3802,6 +3802,22 @@ fn schedule_properties_open_the_definition_on_each_page() {
     assert!(back.sorting.is_empty() && !back.collapse && harness.state().dialogs.schedule_def.is_none());
 }
 
+/// The heading fields of a schedule's formatting page are wide enough to type in: a grid offers a
+/// cell only its column's width, which left them as narrow as an empty cell.
+#[test]
+fn schedule_heading_fields_keep_their_width() {
+    let mut state = sample_state();
+    let view = state.project().views.values().find(|v| matches!(v.kind, cc_core::ViewKind::Schedule { .. }));
+    let view = view.map(|v| v.id).unwrap();
+    crate::schedule_ui::open(&mut state, view, crate::schedule_ui::Tab::Formatting);
+    let mut harness = themed_harness(state, egui::vec2(900.0, 700.0), egui::Theme::Light, |ui, state| {
+        crate::schedule_ui::dialog(ui.ctx(), state);
+    });
+    harness.run();
+    let widths: Vec<f32> = harness.query_all_by_role(Role::TextInput).map(|n| n.rect().width()).collect();
+    assert!(!widths.is_empty() && widths.iter().all(|w| *w > 150.0), "{widths:?}");
+}
+
 /// The project browser follows the organization scheme in use (issue #278):
 /// a scheme by view type and level nests the plans under their levels, and
 /// the Browser Organization dialog undoes its changes on Cancel.
