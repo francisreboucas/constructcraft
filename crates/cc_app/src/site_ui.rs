@@ -780,6 +780,8 @@ impl SiteDialog {
             place: Some(self.site.place.clone()),
             address: (!self.site.address.is_empty()).then_some(address),
             project_address: None,
+            // The dialog does not edit the offset: the stored one stays.
+            utc_offset: None,
             clear: None,
         }
     }

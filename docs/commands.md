@@ -13,7 +13,7 @@ Every command runs the same way from the desktop app, `ccad run` / `ccad script`
 - **Modifying elements**: [`elements_delete`](#elements_delete), [`elements_move`](#elements_move), [`elements_copy`](#elements_copy), [`elements_rotate`](#elements_rotate), [`elements_mirror`](#elements_mirror), [`elements_pin`](#elements_pin), [`element_flip`](#element_flip), [`elements_turn`](#elements_turn), [`elements_export`](#elements_export), [`elements_paste`](#elements_paste), [`wall_join`](#wall_join), [`wall_attach`](#wall_attach), [`geometry_join`](#geometry_join), [`geometry_unjoin`](#geometry_unjoin), [`group_create`](#group_create), [`group_ungroup`](#group_ungroup), [`trim_corner`](#trim_corner), [`trim_extend`](#trim_extend), [`element_split`](#element_split), [`element_offset`](#element_offset), [`element_align`](#element_align), [`element_move_end`](#element_move_end), [`grids_align_ends`](#grids_align_ends), [`element_set`](#element_set), [`elements_set`](#elements_set), [`elements_set_type`](#elements_set_type)
 - **Dimensions and text**: [`dimension_create`](#dimension_create), [`tag_move`](#tag_move), [`dimension_chain_create`](#dimension_chain_create), [`dimension_ordinate_create`](#dimension_ordinate_create), [`dimension_set_value`](#dimension_set_value), [`text_create`](#text_create), [`detail_line_create`](#detail_line_create), [`detail_component_create`](#detail_component_create), [`detail_component_place`](#detail_component_place), [`browser_schemes_list`](#browser_schemes_list), [`browser_scheme_create`](#browser_scheme_create), [`browser_scheme_set`](#browser_scheme_set), [`browser_scheme_delete`](#browser_scheme_delete), [`browser_scheme_use`](#browser_scheme_use), [`browser_tree`](#browser_tree), [`line_styles_list`](#line_styles_list), [`line_style_create`](#line_style_create), [`line_style_set`](#line_style_set), [`line_style_delete`](#line_style_delete), [`filled_region_create`](#filled_region_create), [`masking_region_create`](#masking_region_create), [`filled_region_type_create`](#filled_region_type_create), [`level_mark_create`](#level_mark_create), [`level_mark_type_create`](#level_mark_type_create), [`text_add_leader`](#text_add_leader), [`text_remove_leader`](#text_remove_leader)
 - **Types, components, materials**: [`type_set`](#type_set), [`type_duplicate`](#type_duplicate), [`type_delete`](#type_delete), [`component_create`](#component_create), [`component_get`](#component_get), [`component_param_add`](#component_param_add), [`component_param_set`](#component_param_set), [`component_param_delete`](#component_param_delete), [`component_ref_plane_add`](#component_ref_plane_add), [`component_ref_plane_set`](#component_ref_plane_set), [`component_ref_plane_delete`](#component_ref_plane_delete), [`component_ref_line_add`](#component_ref_line_add), [`component_ref_line_delete`](#component_ref_line_delete), [`component_dimension_add`](#component_dimension_add), [`component_dimension_set`](#component_dimension_set), [`component_dimension_delete`](#component_dimension_delete), [`component_equal_add`](#component_equal_add), [`component_equal_delete`](#component_equal_delete), [`component_piece_add`](#component_piece_add), [`component_piece_set`](#component_piece_set), [`component_piece_delete`](#component_piece_delete), [`component_connector_add`](#component_connector_add), [`component_connector_set`](#component_connector_set), [`component_connector_delete`](#component_connector_delete), [`component_script_set`](#component_script_set), [`component_params_get`](#component_params_get), [`component_params_set`](#component_params_set), [`component_hotspot_move`](#component_hotspot_move), [`material_create`](#material_create), [`material_duplicate`](#material_duplicate), [`material_rename`](#material_rename), [`material_set`](#material_set), [`material_delete`](#material_delete), [`material_texture_set`](#material_texture_set), [`material_texture_clear`](#material_texture_clear), [`fill_patterns_list`](#fill_patterns_list), [`fill_pattern_get`](#fill_pattern_get), [`fill_pattern_create`](#fill_pattern_create), [`fill_pattern_set`](#fill_pattern_set), [`fill_pattern_duplicate`](#fill_pattern_duplicate), [`fill_pattern_delete`](#fill_pattern_delete), [`fill_pattern_import`](#fill_pattern_import), [`fill_pattern_export`](#fill_pattern_export), [`profiles_list`](#profiles_list), [`profile_get`](#profile_get), [`profile_create`](#profile_create), [`profile_set`](#profile_set), [`profile_duplicate`](#profile_duplicate), [`profile_delete`](#profile_delete), [`profile_catalog`](#profile_catalog), [`profile_import`](#profile_import), [`profile_type_create`](#profile_type_create), [`structural_type_for`](#structural_type_for), [`steel_building_create`](#steel_building_create), [`wall_framing_create`](#wall_framing_create), [`paint`](#paint), [`paint_remove`](#paint_remove), [`paints_list`](#paints_list)
-- **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`schedule_get`](#schedule_get), [`schedule_set`](#schedule_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
+- **Levels and views**: [`level_create`](#level_create), [`level_set`](#level_set), [`level_delete`](#level_delete), [`view_create`](#view_create), [`view_set`](#view_set), [`schedule_get`](#schedule_get), [`schedule_set`](#schedule_set), [`view_duplicate`](#view_duplicate), [`view_delete`](#view_delete), [`callout_create`](#callout_create), [`callout_remove`](#callout_remove), [`callouts_list`](#callouts_list), [`sun_position`](#sun_position), [`sun_frames`](#sun_frames), [`sun_presets_list`](#sun_presets_list), [`sun_preset_save`](#sun_preset_save), [`sun_preset_rename`](#sun_preset_rename), [`sun_preset_delete`](#sun_preset_delete), [`sheet_place_view`](#sheet_place_view), [`sheet_remove_viewport`](#sheet_remove_viewport), [`sheet_set`](#sheet_set), [`sheet_fields`](#sheet_fields), [`title_block_create`](#title_block_create), [`component_sheet_piece_add`](#component_sheet_piece_add), [`component_sheet_piece_set`](#component_sheet_piece_set), [`component_sheet_piece_delete`](#component_sheet_piece_delete)
 - **View graphics**: [`view_graphics_get`](#view_graphics_get), [`view_graphics_set`](#view_graphics_set), [`element_override_set`](#element_override_set), [`element_hide_in_view`](#element_hide_in_view), [`filters_list`](#filters_list), [`filter_create`](#filter_create), [`filter_set`](#filter_set), [`filter_delete`](#filter_delete), [`filter_elements`](#filter_elements), [`view_filter_add`](#view_filter_add), [`view_filter_set`](#view_filter_set), [`view_filter_remove`](#view_filter_remove), [`view_filter_move`](#view_filter_move), [`templates_list`](#templates_list), [`template_create`](#template_create), [`template_set`](#template_set), [`template_delete`](#template_delete), [`view_template_apply`](#view_template_apply), [`view_template_assign`](#view_template_assign), [`view_temporary`](#view_temporary), [`view_temporary_apply`](#view_temporary_apply)
 - **Phases**: [`phases_list`](#phases_list), [`phase_create`](#phase_create), [`phase_set`](#phase_set), [`phase_delete`](#phase_delete), [`elements_phase_set`](#elements_phase_set), [`elements_demolish`](#elements_demolish), [`phase_creation_set`](#phase_creation_set), [`phase_filters_list`](#phase_filters_list), [`phase_filter_create`](#phase_filter_create), [`phase_filter_set`](#phase_filter_set), [`phase_filter_delete`](#phase_filter_delete), [`phase_graphics_get`](#phase_graphics_get), [`phase_graphics_set`](#phase_graphics_set)
 - **Design options**: [`options_list`](#options_list), [`option_set_create`](#option_set_create), [`option_set_rename`](#option_set_rename), [`option_set_delete`](#option_set_delete), [`option_create`](#option_create), [`option_set`](#option_set), [`option_delete`](#option_delete), [`option_accept_primary`](#option_accept_primary), [`elements_option_set`](#elements_option_set), [`view_options_set`](#view_options_set), [`option_active_set`](#option_active_set)
@@ -66,13 +66,13 @@ No parameters.
 
 ### `site_get`
 
-*query* — The project's site location: latitude and longitude of the project origin (degrees, WGS 84), its elevation above sea level (meters), the angle from project north to true north (degrees counter-clockwise), the place name and the parts of the postal address; `site` is null when no location is set. `address` is the project address line.
+*query* — The project's site location: latitude and longitude of the project origin (degrees, WGS 84), its elevation above sea level (meters), the angle from project north to true north (degrees counter-clockwise), the place name, the parts of the postal address, and local time's offset from UTC in hours (`utc_offset`, null when not set, and `utc_offset_used`: the one set, else the longitude's nominal time zone, which the sun uses); `site` is null when no location is set. `address` is the project address line.
 
 No parameters.
 
 ### `site_set`
 
-*edit* — Set the project's site location, in one undo step: the latitude and longitude of the project origin (both needed when the project has no location yet), its elevation above sea level, true north and the place and address found by a map search. Fields left out keep their values. When address parts are given the project address (title blocks, IFC) is rewritten from them unless `project_address` is false. `clear` removes the location.
+*edit* — Set the project's site location, in one undo step: the latitude and longitude of the project origin (both needed when the project has no location yet), its elevation above sea level, true north and the place and address found by a map search, and the offset from UTC. Fields left out keep their values. When address parts are given the project address (title blocks, IFC) is rewritten from them unless `project_address` is false. `clear` removes the location.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -84,6 +84,7 @@ No parameters.
 | `place` | string | optional | The place as the map search named it. |
 | `project_address` | boolean | optional | Rewrite the project address from the address parts (default true when `address` is given). |
 | `true_north` | number | optional | Angle from project north (+Y) to true north, degrees counter-clockwise. |
+| `utc_offset` | number | optional | Local time's offset from UTC, hours (-12 to 14; fractions allowed), or `null` for the longitude's nominal time zone. |
 
 ### `site_context_import`
 
@@ -386,7 +387,7 @@ No parameters.
 
 ### `view_get`
 
-*query* — A view with all its parameters (`params`, editable with `view_set`), its `scale` denominator and `scale_text`, the scale as the project writes it (`1:50`, or `1/4" = 1'-0"` in imperial projects).
+*query* — A view with all its parameters (`params`, editable with `view_set`), its `scale` denominator and `scale_text`, the scale as the project writes it (`1:50`, or `1/4" = 1'-0"` in imperial projects), and its `sun`: null, or the settings `view_set` takes plus `derived` (azimuth and altitude, `above_horizon`, the current frame's `date` and `time`, `sunrise` and `sunset`, the number of `frames` and `site_known`).
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -2990,7 +2991,7 @@ No parameters.
 
 ### `view_set`
 
-*edit* — Change a view: name, scale, phase and phase filter, and its `params` as `view_get` shows them (merged: cut height, section depth, legend types, schedule fields, sort, filter and totals, sheet number and size, viewport positions…) and the crop.
+*edit* — Change a view: name, scale, phase and phase filter, and its `params` as `view_get` shows them (merged: cut height, section depth, legend types, schedule fields, sort, filter and totals, sheet number and size, viewport positions…), the crop and the sun.
 
 | Parameter | Type | | Description |
 |---|---|---|---|
@@ -3002,6 +3003,7 @@ No parameters.
 | `phase` | id or name | optional | Phase the view shows (id or name; plans, elevations, sections, 3D views, schedules). |
 | `phase_filter` | id or name | optional | Phase filter (id or name), or `null` for none (every status by category). |
 | `scale` | integer or string | optional | Scale: the denominator (e.g. 100 for 1:100), or text such as `"1:100"` or an imperial label like `"1/8\" = 1'-0\""` (96). |
+| `sun` | object | optional | The view's sun (plans, ceiling plans, 3D views, elevations and sections): the fields to change, shaped like `sun` in `view_get` (a view without a sun starts from a still sun on 2026-06-21 at 10:00), `{"preset": name}` to take a preset, or `null` to remove it. |
 | `visual_style` | string | optional | Visual style: `wireframe` (every edge, no faces), `hidden_line` (white faces), `shaded`, `consistent_colors` (material colors, unlit), `textures` (appearance colors and surface patterns), or `default` (plans hidden line, other views shaded). |
 
 ### `schedule_get`
@@ -3071,6 +3073,62 @@ No parameters.
 | Parameter | Type | | Description |
 |---|---|---|---|
 | `view` | id or name | required | The parent view (id or name). |
+
+### `sun_position`
+
+*query* — Where the sun stands: for a view with a sun, at its current frame (or its lighting direction); else on `date` at `time` (local) at the project's site, or at `latitude`, `longitude` and `utc_offset` given here (a longitude given without an offset takes its nominal time zone). Returns the azimuth (degrees clockwise from true north), the altitude (degrees above the horizon, no refraction), `above_horizon`, the unit `direction` towards the sun in project coordinates (true north applied), sunrise and sunset that day (`HH:MM`, or null with `polar` `day` or `night`), and `site_known` (false: the equator at Greenwich).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `date` | string | optional | The date, `YYYY-MM-DD`. |
+| `latitude` | number | optional | Latitude, degrees (-90 to 90, north positive), instead of the site's. |
+| `longitude` | number | optional | Longitude, degrees (-180 to 180, east positive), instead of the site's. |
+| `time` | string | optional | The local time of day, `HH:MM`. |
+| `utc_offset` | number | optional | Local time's offset from UTC, hours (-12 to 14), instead of the site's. |
+| `view` | id or name | optional | A view with a sun (id or name); or give `date` and `time`. |
+
+### `sun_frames`
+
+*query* — The frames of a view's sun study, in time order: `count` (all of them, at most 5000; 0 for lighting, 1 for a still sun) and the first `limit` as `{index, date, time, azimuth, altitude}`.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `view` | id or name | required | A view with a sun (id or name). |
+| `limit` | integer | optional | Most frames listed (default 500, at most 5000). |
+
+### `sun_presets_list`
+
+*query* — The project's sun presets: each `name` with its mode in the form `view_set` `sun` takes (a view takes one with `"sun": {"preset": name}`).
+
+No parameters.
+
+### `sun_preset_save`
+
+*edit* — Save a sun preset, in one undo step: the mode and its values (dates, times, step or light direction; not the frame, path, shadows or ground) of a view's sun, or of `sun` applied to the default sun. A preset of the same name is replaced only with `replace`; a project keeps at most 200.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | Name of the preset. |
+| `replace` | boolean | optional | Replace a preset of the same name (default false: refused). |
+| `sun` | object | optional | The sun to save, as `view_set` takes it. |
+| `view` | id or name | optional | A view whose sun is saved (id or name); or give `sun`. |
+
+### `sun_preset_rename`
+
+*edit* — Rename a sun preset, in one undo step.
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The preset's name. |
+| `new_name` | string | required | Its new name (no other preset's). |
+
+### `sun_preset_delete`
+
+*edit* — Delete a sun preset, in one undo step (views that took it keep their sun).
+
+| Parameter | Type | | Description |
+|---|---|---|---|
+| `name` | string | required | The preset's name. |
 
 ### `sheet_place_view`
 

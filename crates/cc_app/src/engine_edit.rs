@@ -124,6 +124,8 @@ pub fn view(state: &mut AppState, id: ViewId, key: Option<u64>, f: impl FnOnce(&
             .then(|| new.visual_style.map_or("default", |s| s.name()).to_string()),
         phase_filter: (new.phase_filter != old.phase_filter).then(|| new.phase_filter.map(|f| Ref::Id(f.0))),
         crop,
+        sun: (new.sun != old.sun)
+            .then(|| new.sun.as_ref().map(|sun| cc_engine::commands::sun::sun_arg(state.project(), sun))),
     };
     run(state, key, command)
 }
