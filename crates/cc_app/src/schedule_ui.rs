@@ -486,6 +486,9 @@ fn set_format(d: &mut ScheduleDef, field: ScheduleField, f: impl FnOnce(&mut Col
     }
 }
 
+/// The width of a column's heading field in the formatting page.
+const HEADING_WIDTH: f32 = 190.0;
+
 /// Each column's heading, alignment, and whether it is hidden or totaled.
 fn formatting_page(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Category, def: &ScheduleDef) {
     let fields = def.fields_for(category);
@@ -502,7 +505,10 @@ fn formatting_page(ui: &mut Ui, state: &mut AppState, view: ViewId, category: Ca
             let mut heading = format.heading.clone().unwrap_or_default();
             let before = heading.clone();
             let r = crate::table::live_text(ui, ("schedule-heading", view, i), &mut heading, |ui, t| {
-                ui.add(egui::TextEdit::singleline(t).desired_width(190.0).hint_text(name.clone()))
+                // A grid cell that is not the last offers only the width the column already has, so a
+                // field that asks for a desired width stays as narrow as an empty cell: give it its size.
+                let size = [HEADING_WIDTH, ui.spacing().interact_size.y];
+                ui.add_sized(size, egui::TextEdit::singleline(t).hint_text(name.clone()))
             });
             if heading != before {
                 let text: String = heading.chars().take(cc_core::schedule::MAX_SCHEDULE_TEXT).collect();
