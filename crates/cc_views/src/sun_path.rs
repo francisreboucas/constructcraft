@@ -387,33 +387,82 @@ impl Builder {
 
 // ---------------------------------------------------------------- drawing
 
-/// Lines of the compass: neutral grey-blue.
-const GRID_COLOR: [u8; 3] = [90, 110, 150];
-const GRID_WEIGHT: f64 = 0.13;
-/// The band between the two circles of the ring.
-const BAND_COLOR: [u8; 4] = [120, 150, 220, 60];
+/// Lines of the compass: neutral grey-blue (RGB; weights are pen weights, mm).
+pub const GRID_COLOR: [u8; 3] = [90, 110, 150];
+pub const GRID_WEIGHT: f64 = 0.13;
+/// The band between the two circles of the ring (RGBA).
+pub const BAND_COLOR: [u8; 4] = [120, 150, 220, 60];
 /// The sun's path: amber.
-const PATH_COLOR: [u8; 3] = [240, 170, 0];
-const PATH_WEIGHT: f64 = 0.25;
-const RANGE_WEIGHT: f64 = 0.13;
+pub const PATH_COLOR: [u8; 3] = [240, 170, 0];
+pub const PATH_WEIGHT: f64 = 0.25;
+pub const RANGE_WEIGHT: f64 = 0.13;
 /// Radius of an hour's dot on paper, mm.
-const DOT_RADIUS_MM: f64 = 0.6;
-/// The sun's disc and its outline.
-const SUN_FILL: [u8; 4] = [255, 225, 90, 230];
-const SUN_OUTLINE: [u8; 3] = [200, 140, 0];
-const SUN_OUTLINE_WEIGHT: f64 = 0.18;
+pub const DOT_RADIUS_MM: f64 = 0.6;
+/// The sun's disc (RGBA) and its outline.
+pub const SUN_FILL: [u8; 4] = [255, 225, 90, 230];
+pub const SUN_OUTLINE: [u8; 3] = [200, 140, 0];
+pub const SUN_OUTLINE_WEIGHT: f64 = 0.18;
 /// Smallest radius of the sun's disc on paper, mm.
-const MIN_SUN_RADIUS_MM: f64 = 2.5;
+pub const MIN_SUN_RADIUS_MM: f64 = 2.5;
 /// Chords of a disc.
 const DISC_SEGMENTS: usize = 20;
 /// Text heights on paper, mm.
-const CARDINAL_SIZE: f64 = 3.5;
-const TIME_SIZE: f64 = 2.0;
-const DATE_SIZE: f64 = 2.5;
+pub const CARDINAL_SIZE: f64 = 3.5;
+pub const TIME_SIZE: f64 = 2.0;
+pub const DATE_SIZE: f64 = 2.5;
 /// Gap between a label and its point on paper, mm.
-const LABEL_GAP_MM: f64 = 1.5;
+pub const LABEL_GAP_MM: f64 = 1.5;
 /// The translation key of the date's pattern (`{ $day }`, `{ $month }`, `{ $year }`).
 const DATE_PATTERN_KEY: &str = "sun-date-pattern";
+
+/// The point a label is laid out from, world coordinates: a label on the
+/// horizon (see [`on_horizon`]) stands past the compass's ticks along its
+/// `out`, clear of the ring; the others at their point.
+pub fn label_anchor(d: &SunDiagram, l: &SunLabel) -> DVec3 {
+    if on_horizon(d, l) { l.pos + l.out * ((TICK_END - 1.0) * d.radius) } else { l.pos }
+}
+
+/// Whether `l` marks a point on the horizon: a sunrise, a sunset, or a
+/// date at the sunrise (a polar day's date stands on the path, above it).
+pub fn on_horizon(d: &SunDiagram, l: &SunLabel) -> bool {
+    match l.kind {
+        SunLabelKind::Sunrise | SunLabelKind::Sunset => true,
+        SunLabelKind::Date => (l.pos.z - d.center.z).abs() <= 1e-9 * d.radius.max(1.0),
+        SunLabelKind::Cardinal | SunLabelKind::Now => false,
+    }
+}
+
+/// The label that the label at `index` stacks beyond, further from the
+/// ring: a date on the sunrise's time at the same point.
+pub fn stacked_on(d: &SunDiagram, index: usize) -> Option<usize> {
+    let l = d.labels.get(index)?;
+    if l.kind != SunLabelKind::Date {
+        return None;
+    }
+    let near = 1e-9 * d.radius.max(1.0);
+    d.labels.iter().position(|o| o.kind == SunLabelKind::Sunrise && o.pos.distance(l.pos) <= near)
+}
+
+/// Half the extent along the unit direction `dir` of a text box `width`
+/// wide and `height` tall (axis aligned).
+pub fn half_extent(dir: DVec2, width: f64, height: f64) -> f64 {
+    dir.x.abs() * width * 0.5 + dir.y.abs() * height * 0.5
+}
+
+/// The approximate width of `text` written `size` tall (wide characters,
+/// such as CJK ones, a full size; others six tenths of it).
+pub fn text_width(text: &str, size: f64) -> f64 {
+    text.chars().map(|c| if c >= '\u{1100}' { 1.0 } else { 0.6 }).sum::<f64>() * size
+}
+
+/// The text height of a label, paper mm.
+fn label_size(kind: SunLabelKind) -> f64 {
+    match kind {
+        SunLabelKind::Cardinal => CARDINAL_SIZE,
+        SunLabelKind::Date => DATE_SIZE,
+        SunLabelKind::Sunrise | SunLabelKind::Sunset | SunLabelKind::Now => TIME_SIZE,
+    }
+}
 
 /// A time of day as `HH:MM` (minutes after midnight, any day).
 pub fn time_text(minutes: f64) -> String {
@@ -523,33 +572,42 @@ pub fn draw(d: &mut Drawing2D, project: &Project, geom: &ModelGeometry, view: &V
         d.fill(outline.clone(), SUN_FILL, None);
         line(d, &outline, true, pen(SUN_OUTLINE, SUN_OUTLINE_WEIGHT, None));
     }
-    for l in &diagram.labels {
-        let text = label_text(l.text, label);
-        if text.trim().is_empty() {
-            continue;
-        }
-        let size = match l.kind {
-            SunLabelKind::Cardinal => CARDINAL_SIZE,
-            SunLabelKind::Date => DATE_SIZE,
-            SunLabelKind::Sunrise | SunLabelKind::Sunset | SunLabelKind::Now => TIME_SIZE,
+    // Labels on the horizon move away from the ring along their `out` in
+    // plans and 3D views, and up in elevations and sections, where the
+    // ring is seen edge on; a date stacks beyond the sunrise's time.
+    let edge_on = matches!(view.kind, cc_core::ViewKind::Elevation { .. } | cc_core::ViewKind::Section { .. });
+    let texts: Vec<String> = diagram.labels.iter().map(|l| label_text(l.text, label)).collect();
+    for (i, l) in diagram.labels.iter().enumerate() {
+        let Some(text) = texts.get(i).filter(|t| !t.trim().is_empty()) else { continue };
+        let size = label_size(l.kind);
+        let anchor = label_anchor(&diagram, l);
+        let at = to2d(anchor);
+        let projected = to2d(anchor + l.out) - at;
+        let horizon = on_horizon(&diagram, l);
+        let dir = match projected.try_normalize() {
+            _ if horizon && edge_on => DVec2::Y,
+            Some(dir) if !horizon || projected.length() > 0.3 => dir,
+            _ if horizon => DVec2::Y,
+            _ => DVec2::ZERO,
         };
-        let at = to2d(l.pos);
-        let out = (to2d(l.pos + l.out) - at).try_normalize().unwrap_or(DVec2::ZERO);
-        // Clear of the point by half the text's box along `out`, in paper mm.
-        let width = text.chars().map(|c| if c >= '\u{1100}' { 1.0 } else { 0.6 }).sum::<f64>() * size;
-        let half = out.x.abs() * width * 0.5 + out.y.abs() * size * 0.5;
-        let clear = match l.kind {
+        // Clear of the point by half the text's box along `dir`, in paper mm.
+        let half = half_extent(dir, text_width(text, size), size);
+        let mut clear = match l.kind {
             SunLabelKind::Cardinal => 0.0,
             SunLabelKind::Now => sun_r / mm + LABEL_GAP_MM,
             _ => LABEL_GAP_MM,
         };
-        let mut pos = at + out * ((clear + half) * mm);
-        if l.kind == SunLabelKind::Date {
-            // Under the sunrise's time.
-            pos -= DVec2::new(0.0, (TIME_SIZE + DATE_SIZE) * 0.6 * mm);
+        // A date beyond the sunrise's time: past its whole box.
+        if let Some(j) = stacked_on(&diagram, i)
+            && let (Some(under), Some(o)) = (texts.get(j), diagram.labels.get(j))
+            && !under.trim().is_empty()
+        {
+            let size = label_size(o.kind);
+            clear += 2.0 * half_extent(dir, text_width(under, size), size) + LABEL_GAP_MM;
         }
+        let pos = at + dir * ((clear + half) * mm);
         if pos.is_finite() {
-            d.text_at(pos, text, size, Anchor::Center, 0.0);
+            d.text_at(pos, text.clone(), size, Anchor::Center, 0.0);
         }
     }
     // Keep only finite primitives; count them as the overlay.
@@ -719,6 +777,48 @@ mod tests {
         let texts = texts(overlay);
         for key in ["sun-north", "sun-east", "sun-south", "sun-west", "10:00", "2026-06-21"] {
             assert!(texts.contains(&key), "{key} in {texts:?}");
+        }
+    }
+
+    /// The sunrise's time and the date stand apart, the date further out,
+    /// and both clear of the ring's band, wherever the sun rises.
+    #[test]
+    fn sunrise_time_and_date_do_not_overlap_in_a_plan() {
+        let (mut project, geom) = sample();
+        let cases =
+            [(-15.8, -47.9, -3.0, (2026, 6, 21)), (0.0, 0.0, 0.0, (2026, 3, 20)), (51.5, 0.0, 0.0, (2026, 12, 21))];
+        for (lat, lon, tz, (y, m, day)) in cases {
+            site(&mut project, lat, lon, tz, 0.0);
+            let mut plan = view(&project, ViewCategory::FloorPlan);
+            plan.sun = Some(still(y, m, day, 600));
+            let a = diagram(&project, &geom, &plan).unwrap();
+            let rise = label(&a, SunLabelKind::Sunrise)[0];
+            let SunText::Time(minutes) = rise.text else { panic!("{rise:?}") };
+            let (time, date) = (time_text(minutes), SunDate::new(y, m, day).unwrap().iso());
+            let d = generate(&project, &geom, &plan).unwrap();
+            let mm = f64::from(plan.scale) / 1000.0;
+            // The text's box, model meters (min, max).
+            let text_box = |wanted: &str| {
+                d.overlay_prims()
+                    .iter()
+                    .find_map(|p| match p {
+                        Prim::Text { pos, text, size, .. } if text == wanted => {
+                            let half = DVec2::new(text_width(text, *size), *size) * 0.5 * mm;
+                            Some((*pos - half, *pos + half))
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("{wanted} drawn"))
+            };
+            let (t, dt) = (text_box(&time), text_box(&date));
+            let overlap = t.0.x < dt.1.x && dt.0.x < t.1.x && t.0.y < dt.1.y && dt.0.y < t.1.y;
+            assert!(!overlap, "{lat}: {time} {t:?} and {date} {dt:?}");
+            let c = a.center.truncate();
+            let nearest = |b: (DVec2, DVec2)| c.clamp(b.0, b.1).distance(c);
+            for (name, b) in [(&time, t), (&date, dt)] {
+                assert!(nearest(b) > OUTER_RING * a.radius, "{lat}: {name} over the ring: {b:?}");
+            }
+            assert!(nearest(dt) > nearest(t), "{lat}: the date further out");
         }
     }
 
