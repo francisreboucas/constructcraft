@@ -408,6 +408,9 @@ impl Project {
         // Bar marking: numbers in range, usable frozen marks.
         repairs += self.bar_marking.repair();
 
+        // Sun presets: named, distinct, bounded, their values in range.
+        repairs += crate::sun::repair_presets(&mut self.sun_presets);
+
         // Fill patterns: valid patterns, and references to patterns that are gone dropped.
         repairs += self.repair_fill_patterns();
         repairs += self.repair_profiles();
@@ -822,6 +825,18 @@ impl Project {
             }
             if let Some(u) = view.kind.underlay_mut() {
                 repairs += u.repair(|l| levels.contains(&l));
+            }
+            // The sun: only on views that take one, its values in range, on a level that exists.
+            if view.sun.is_some() && !view.kind.takes_sun() {
+                view.sun = None;
+                repairs += 1;
+            }
+            if let Some(sun) = &mut view.sun {
+                repairs += sun.repair();
+                if sun.ground.is_some_and(|l| !levels.contains(&l)) {
+                    sun.ground = None;
+                    repairs += 1;
+                }
             }
             if view.scale == 0 {
                 view.scale = 100;

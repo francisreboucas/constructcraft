@@ -67,6 +67,7 @@ pub mod stair;
 pub mod steel_building;
 pub mod structural_material;
 pub mod structural_profile;
+pub mod sun;
 pub mod sweep;
 mod template_spec;
 pub use template_spec::Defaults;
@@ -134,6 +135,7 @@ pub use stair::{
 };
 pub use structural_material::StructuralMaterial;
 pub use structural_profile::{ProfileDef, ProfileMaterial, ProfileShape, SectionOutline};
+pub use sun::{SunDate, SunInterval, SunMode, SunPreset, SunSettings, SunSite, SunState};
 pub use transform::PlanTransform;
 pub use types::{
     Category, ColumnSection, ElementType, FoundationKind, Layer, LayerFunction, SectionShape, StripHaunch, TypeData,

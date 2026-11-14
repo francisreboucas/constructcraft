@@ -420,6 +420,10 @@ pub struct View {
     /// of the model (cropped to it) or a drafting view it points to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callout: Option<crate::callout::Callout>,
+    /// The view's sun: a date and time, a study or a light direction
+    /// (see [`crate::sun`]); only views that [take one](ViewKind::takes_sun).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sun: Option<crate::sun::SunSettings>,
 }
 
 /// How a view shows the model's surfaces.
@@ -586,6 +590,19 @@ impl ViewKind {
         )
     }
 
+    /// Whether views of this kind can have a sun ([`View::sun`]): plans,
+    /// ceiling plans, 3D views, elevations and sections.
+    pub fn takes_sun(&self) -> bool {
+        matches!(
+            self,
+            ViewKind::FloorPlan { .. }
+                | ViewKind::CeilingPlan { .. }
+                | ViewKind::ThreeD { .. }
+                | ViewKind::Elevation { .. }
+                | ViewKind::Section { .. }
+        )
+    }
+
     /// An ordinary ceiling plan of `level` cut at 1.20 m.
     pub fn ceiling_plan(level: LevelId) -> Self {
         ViewKind::CeilingPlan { level, cut_height: 1.2, underlay: Underlay::default() }
@@ -674,6 +691,7 @@ impl View {
             visual_style: None,
             crop: None,
             callout: None,
+            sun: None,
         }
     }
 

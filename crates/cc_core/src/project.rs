@@ -113,6 +113,9 @@ pub struct Project {
     /// How reinforcing bars are marked (see [`crate::bar_marks`]).
     #[serde(default, skip_serializing_if = "crate::bar_marks::BarMarking::is_default")]
     pub bar_marking: crate::bar_marks::BarMarking,
+    /// Named sun settings views can take (see [`crate::sun`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sun_presets: Vec<crate::sun::SunPreset>,
     /// The design option new elements go into and views without a choice of
     /// their own show for its set: session state, not saved nor undone (set
     /// through [`crate::Document::set_active_option`]).
@@ -156,6 +159,7 @@ impl Project {
             option_sets: Vec::new(),
             browser: Default::default(),
             bar_marking: Default::default(),
+            sun_presets: Vec::new(),
             active_option: None,
             next_id: 1,
         }
@@ -988,6 +992,7 @@ impl Project {
             browser,
             bar_marking,
             profiles,
+            sun_presets,
             active_option,
             next_id,
         } = self;
@@ -1015,6 +1020,7 @@ impl Project {
             browser: browser.clone(),
             bar_marking: bar_marking.clone(),
             profiles: profiles.clone(),
+            sun_presets: sun_presets.clone(),
             active_option: *active_option,
             next_id: *next_id,
         }

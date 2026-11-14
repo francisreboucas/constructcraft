@@ -30,6 +30,7 @@ struct Settings {
     option_sets: Vec<crate::OptionSet>,
     browser: crate::browser::BrowserOrganization,
     bar_marking: crate::bar_marks::BarMarking,
+    sun_presets: Vec<crate::sun::SunPreset>,
 }
 
 impl Settings {
@@ -55,6 +56,7 @@ impl Settings {
             option_sets: p.option_sets.clone(),
             browser: p.browser.clone(),
             bar_marking: p.bar_marking.clone(),
+            sun_presets: p.sun_presets.clone(),
         }
     }
 
@@ -79,6 +81,7 @@ impl Settings {
         p.option_sets = self.option_sets;
         p.browser = self.browser;
         p.bar_marking = self.bar_marking;
+        p.sun_presets = self.sun_presets;
     }
 }
 
@@ -591,6 +594,28 @@ impl<'a> EditCtx<'a> {
         &mut self.project.line_styles
     }
 
+    /// The project's sun presets (see [`crate::sun`]).
+    pub fn sun_presets_mut(&mut self) -> &mut Vec<crate::sun::SunPreset> {
+        self.touch_settings();
+        &mut self.project.sun_presets
+    }
+
+    /// Views whose sun's ground level is gone (deleted by this edit) lose it.
+    fn sync_sun_ground(&mut self) {
+        let p = &*self.project;
+        let stale: Vec<ViewId> = p
+            .views
+            .values()
+            .filter(|v| v.sun.as_ref().and_then(|s| s.ground).is_some_and(|l| p.level(l).is_none()))
+            .map(|v| v.id)
+            .collect();
+        for id in stale {
+            if let Some(sun) = self.view_mut(id).and_then(|v| v.sun.as_mut()) {
+                sun.ground = None;
+            }
+        }
+    }
+
     /// The project's fill patterns.
     pub fn fill_patterns_mut(&mut self) -> &mut crate::fill_pattern::FillPatterns {
         self.touch_settings();
@@ -963,6 +988,7 @@ impl<'a> EditCtx<'a> {
         self.sync_member_phases();
         self.sync_sketches();
         self.sync_callouts();
+        self.sync_sun_ground();
         self.sync_views();
         let p = &*self.project;
         self.tx.elements.retain(|id, c| {
