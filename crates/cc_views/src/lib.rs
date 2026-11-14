@@ -35,6 +35,7 @@ pub mod region;
 mod schedule;
 mod sheet;
 pub mod sheet_fields;
+pub mod sun_path;
 mod topography;
 
 pub use annotate::{DimensionLayout, HIGHLIGHT_ONLY, dimension_layout, dimension_type, draw_dimension, draw_marks};
@@ -43,9 +44,10 @@ pub use drawing::{Anchor, Drawing2D, LineStyle, Pen, Prim, ResolvedPen, SectionH
 pub use drawing_index::DrawingIndex;
 pub use legend::legend;
 pub use plan::{is_structural, plan, plan_of, section_pieces};
-pub use projected::{Frame, Look, axonometric, elevation, section};
+pub use projected::{Frame, Look, axonometric, elevation, section, view_frame};
 pub use schedule::{Cell, Row, Table, field_value, schedule, schedule_where, to_csv, totaled_by_default};
 pub use sheet::{MARGIN, PlacedViewport, Sheet, SheetEnv, compose as compose_sheet, title_block_drawing};
+pub use sun_path::{SunDiagram, SunLabel, SunLabelKind, SunLine, SunLineKind, SunText, diagram as sun_diagram};
 
 use cc_core::{Project, View, ViewKind};
 use cc_geom::ModelGeometry;
@@ -92,7 +94,7 @@ pub fn generate_temporary(
                 plan::strip_fills(&mut d);
             } else if style.colored() {
                 let cut_z = project.level_elevation(*level) + cut_height;
-                let under = plan::style_underlay(geom, cut_z, ceiling, Look::of(view), &project.fill_patterns);
+                let under = plan::style_underlay(geom, cut_z, ceiling, Look::of(project, view), &project.fill_patterns);
                 d.prims.splice(0..0, under);
             }
             if let Some(discipline) = services {
@@ -112,15 +114,15 @@ pub fn generate_temporary(
             }
             d
         }
-        ViewKind::Elevation { direction } => elevation(project, geom, *direction, Look::of(view)),
+        ViewKind::Elevation { direction } => elevation(project, geom, *direction, Look::of(project, view)),
         ViewKind::Section { start, end, depth, .. } => {
-            let mut d = section(project, geom, (*start, *end), *depth, view.scale, Look::of(view));
+            let mut d = section(project, geom, (*start, *end), *depth, view.scale, Look::of(project, view));
             joins::merge(project, &mut d);
             d
         }
         ViewKind::ThreeD { camera, analytical: true, .. } => projected::analytical(project, geom, camera),
         ViewKind::ThreeD { camera, rebar: true, .. } => projected::rebar(geom, camera),
-        ViewKind::ThreeD { camera, .. } => axonometric(project, geom, camera, Look::of(view)),
+        ViewKind::ThreeD { camera, .. } => axonometric(project, geom, camera, Look::of(project, view)),
         ViewKind::Legend { types } => legend(project, types, view.scale),
         // No model geometry: only what the view owns, added below.
         ViewKind::Drafting { .. } => Drawing2D::default(),
@@ -157,6 +159,8 @@ pub fn generate_temporary(
     if let Some(rect) = view.crop.filter(|r| r.is_valid() && view.kind.croppable()) {
         callout::crop(&mut d, project, view.id, rect);
     }
+    // The sun path last, over everything: neither cropped nor overridden.
+    sun_path::draw(&mut d, project, geom, view, label);
     Some(d)
 }
 
