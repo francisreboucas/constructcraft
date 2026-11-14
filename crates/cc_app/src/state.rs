@@ -98,6 +98,8 @@ pub struct Dialogs {
     pub browser_org: Option<crate::browser_org_dialog::BrowserOrgDialog>,
     /// The project's line styles.
     pub line_styles: Option<crate::line_styles_dialog::LineStylesDialog>,
+    /// The Sun Settings of a view.
+    pub sun: Option<crate::sun_ui::SunDialog>,
     /// The fill pattern manager.
     pub fill_patterns: Option<crate::fill_patterns_dialog::FillPatternsDialog>,
     /// The Profile Manager.

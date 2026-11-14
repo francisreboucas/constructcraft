@@ -2983,6 +2983,8 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
                     crate::engine_edit::view(state, id, None, |v| v.visual_style = Some(style));
                 }
             }
+            // The sun of plans, 3D views, elevations and sections.
+            crate::sun_ui::view_rows(ui, state, id);
             if let ViewKind::ThreeD { analytical, .. } = view.kind {
                 let mut on = analytical;
                 if row(ui, &t!("prop-analytical"), |ui| crate::table::checkbox(ui, &mut on)).changed() {
