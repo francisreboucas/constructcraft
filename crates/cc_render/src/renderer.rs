@@ -504,7 +504,7 @@ impl Renderer3D {
                         indices: &b.indices,
                         count: b.index_count,
                     });
-                    sun.update(queue, &mut encoder, light, self.bounds, casters);
+                    sun.update(device, queue, &mut encoder, light, self.bounds, casters);
                     self.shadows_current = true;
                 }
                 Some(&*sun)
@@ -864,5 +864,34 @@ mod gpu_tests {
         r.render(&device, &queue, SIZE, &camera);
         r.upload(&device, &scene(false, false));
         assert!(r.drawn.is_none() && !r.shadows_current);
+    }
+
+    /// A sun that casts no shadows makes no shadow map of its size; the
+    /// first one that does makes it, and it lights the same as a fresh one.
+    #[test]
+    #[ignore = "needs a GPU adapter"]
+    fn the_shadow_map_is_made_only_for_shadows() {
+        let Some((device, queue)) = gpu() else {
+            eprintln!("no GPU adapter: nothing checked");
+            return;
+        };
+        let camera = CameraState { target: DVec3::new(1.0, 1.0, 0.0), yaw_deg: 0.0, pitch_deg: 60.0, distance: 25.0 };
+        let sun = Light { direction: Vec3::new(-1.0, -1.0, 1.2), shadows: true, ground: Some(0.0) };
+        let mut r = Renderer3D::new(&device);
+        r.upload(&device, &scene(true, false));
+        r.set_light(Some(Light { shadows: false, ..sun }));
+        r.render(&device, &queue, SIZE, &camera);
+        assert_eq!(r.sun.as_ref().map(|s| s.map_size()), Some(1));
+        // Below the horizon a shadow-casting sun casts none either.
+        r.set_light(Some(Light { direction: Vec3::new(-1.0, -1.0, -0.5), ..sun }));
+        r.render(&device, &queue, SIZE, &camera);
+        assert_eq!(r.sun.as_ref().map(|s| s.map_size()), Some(1));
+        r.set_light(Some(sun));
+        let grown = r.render_to_rgba(&device, &queue, SIZE, &camera).unwrap();
+        assert!(r.sun.as_ref().is_some_and(|s| s.map_size() > 1));
+        let mut fresh = Renderer3D::new(&device);
+        fresh.upload(&device, &scene(true, false));
+        fresh.set_light(Some(sun));
+        assert_eq!(fresh.render_to_rgba(&device, &queue, SIZE, &camera).unwrap(), grown);
     }
 }

@@ -1,5 +1,6 @@
-//! The sun's GPU side: its pipelines, uniforms and shadow map, made the first
-//! time a frame is lit by a sun (see `sun.rs` for the math).
+//! The sun's GPU side: its pipelines and uniforms, made the first time a
+//! frame is lit by a sun, and its shadow map, made the first time it casts
+//! shadows (see `sun.rs` for the math).
 
 use crate::Vertex;
 use crate::renderer::{DEPTH_FORMAT, FACE_BIAS, PipelineSpec, Renderer3D, Uniforms, frame_pipeline};
@@ -40,8 +41,15 @@ pub(crate) struct SunPass {
     /// The light's view as the shadow pass's camera (group 0).
     light_uniforms: wgpu::Buffer,
     light_group: wgpu::BindGroup,
+    /// The shadow map: one texel until the sun first casts shadows (a
+    /// sun that does not cast them needs no map of its size).
     map: wgpu::TextureView,
     map_size: u32,
+    /// What the bind group is rebuilt from when the map grows.
+    sun_layout: wgpu::BindGroupLayout,
+    compare: wgpu::Sampler,
+    /// Making the full map failed on this device: no shadows.
+    map_failed: bool,
     /// The ground is drawn (the sun is up and casts shadows on it).
     pub draws_ground: bool,
 }
@@ -151,19 +159,7 @@ impl SunPass {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let map_size = sun::SHADOW_MAP_SIZE.min(device.limits().max_texture_dimension_2d).max(1);
-        let map = device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("cc_render shadow map"),
-                size: wgpu::Extent3d { width: map_size, height: map_size, depth_or_array_layers: 1 },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: DEPTH_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            })
-            .create_view(&Default::default());
+        let map = shadow_map(device, 1);
         let compare = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("cc_render shadow map"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -171,15 +167,7 @@ impl SunPass {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("cc_render sun"),
-            layout: &sun_layout,
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&map) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&compare) },
-            ],
-        });
+        let bind_group = sun_group(device, &sun_layout, &uniforms, &map, &compare);
         let light_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cc_render light view"),
             size: std::mem::size_of::<Uniforms>() as u64,
@@ -199,9 +187,46 @@ impl SunPass {
             light_uniforms,
             light_group,
             map,
-            map_size,
+            map_size: 1,
+            sun_layout,
+            compare,
+            map_failed: false,
             draws_ground: false,
         }
+    }
+
+    /// Make the full shadow map (once); `false` when the device cannot.
+    fn full_map(&mut self, device: &wgpu::Device) -> bool {
+        let size = sun::SHADOW_MAP_SIZE.min(device.limits().max_texture_dimension_2d).max(1);
+        if self.map_size >= size {
+            return true;
+        }
+        if self.map_failed {
+            return false;
+        }
+        let made = caught(device, || {
+            let map = shadow_map(device, size);
+            let group = sun_group(device, &self.sun_layout, &self.uniforms, &map, &self.compare);
+            (map, group)
+        });
+        match made {
+            Some((map, group)) => {
+                self.map = map;
+                self.bind_group = group;
+                self.map_size = size;
+                true
+            }
+            None => {
+                self.map_failed = true;
+                false
+            }
+        }
+    }
+
+    /// The side of the shadow map, texels (1 until the sun casts shadows).
+    #[cfg(test)]
+    pub fn map_size(&self) -> u32 {
+        self.map_size
     }
 
     /// Set the sun's uniforms for `light` (usable) over a mesh within
@@ -209,12 +234,16 @@ impl SunPass {
     /// casts shadows.
     pub fn update(
         &mut self,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         light: Light,
         bounds: Option<Bounds>,
         casters: Option<Casters>,
     ) {
+        // The full map only for a sun that casts shadows; without it, none.
+        let casts = light.shadows && light.direction.z > 0.0 && bounds.is_some();
+        let light = if casts && !self.full_map(device) { Light { shadows: false, ..light } } else { light };
         let setup = sun::setup(light, bounds, self.map_size);
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&setup.uniforms));
         self.draws_ground = setup.ground;
@@ -241,6 +270,41 @@ impl SunPass {
             pass.draw_indexed(0..c.count, 0, 0..1);
         }
     }
+}
+
+/// A square depth texture of `size` texels for the shadow map.
+fn shadow_map(device: &wgpu::Device, size: u32) -> wgpu::TextureView {
+    device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("cc_render shadow map"),
+            size: wgpu::Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&Default::default())
+}
+
+/// Group 1 of the sun's pipelines: its uniforms, the shadow map and its sampler.
+fn sun_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    uniforms: &wgpu::Buffer,
+    map: &wgpu::TextureView,
+    compare: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("cc_render sun"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(map) },
+            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(compare) },
+        ],
+    })
 }
 
 /// Run `make` catching the device errors it causes (wgpu aborts on those
