@@ -115,14 +115,10 @@ impl ConstructApp {
     }
 }
 
-/// First floor plan on the left, the 3D view on the right.
+/// Open the first floor plan; other views are opened explicitly by the user.
 fn initial_dock(project: &Project) -> DockState<ViewId> {
     let plan = project.views_of(ViewCategory::FloorPlan).next().map(|v| v.id);
-    let threed = project.views_of(ViewCategory::ThreeD).next().map(|v| v.id);
     let mut dock = DockState::new(plan.into_iter().collect());
-    if let Some(t3) = threed {
-        dock.main_surface_mut().split_right(NodeIndex::root(), 0.55, vec![t3]);
-    }
     // Focus the plan so the properties palette shows it from the start.
     if let Some(path) = plan.and_then(|p| dock.find_tab(&p)) {
         dock.set_focused_node_and_surface(path.node_path());
@@ -746,6 +742,16 @@ mod tests {
         let every_frame =
             |ctx: &egui::Context| ctx.send_viewport_cmd(egui::ViewportCommand::Title("ConstructCraft".into()));
         assert_eq!(settle(&mut { every_frame }), None, "sending it every frame never settles");
+    }
+
+    #[test]
+    /// A new project opens its floor plan without opening the 3D view.
+    fn initial_layout_opens_only_the_floor_plan() {
+        let project = Project::from_template();
+        let dock = initial_dock(&project);
+        let opened: Vec<_> = dock.iter_all_tabs().map(|(_, id)| *id).collect();
+        assert_eq!(opened.len(), 1);
+        assert!(project.view(opened[0]).is_some_and(|view| view.category() == ViewCategory::FloorPlan));
     }
 
     #[test]
