@@ -133,6 +133,12 @@ impl Extrusion {
         self.vector.length() > 1e-9 && self.vector.normalize().z.abs() > 0.999
     }
 
+    /// Whether the profile lies in a horizontal plane, independent of the extrusion direction.
+    pub fn has_level_profile(&self) -> bool {
+        let level = |v: DVec3| v.z.abs() < 1e-9 * v.length().max(1.0);
+        level(self.xf.matrix3.x_axis) && level(self.xf.matrix3.y_axis)
+    }
+
     /// World XY of the profile outline (the bottom cap of a vertical extrusion).
     pub fn footprint(&self) -> Vec<DVec2> {
         self.profile.pts.iter().map(|p| self.xf.transform_point3(p.extend(0.0)).truncate()).collect()
@@ -148,8 +154,7 @@ impl Extrusion {
     /// [`Extrusion::footprint`] and its voids as lines, arcs and circles,
     /// when the profile has them and lies level.
     pub fn footprint_curves(&self) -> Option<Vec<SketchCurve>> {
-        let level = |v: DVec3| v.z.abs() < 1e-9 * v.length().max(1.0);
-        if !(level(self.xf.matrix3.x_axis) && level(self.xf.matrix3.y_axis)) {
+        if !self.has_level_profile() {
             return None;
         }
         map_curves(self.profile.curves.as_deref()?, &self.xf)
