@@ -22,6 +22,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, canvas: Rect) {
     let controlled = crate::graphics_dialog::controlled(state, view_id, "visual_style");
     let position = canvas.left_bottom() + egui::vec2(12.0, -40.0);
     let area = Rect::from_min_size(position, egui::vec2(180.0, 28.0));
+    ui.painter().rect_filled(area, 5.0, crate::theme::PALETTE.panel);
     ui.scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
         ui.add_enabled_ui(!controlled, |ui| {
             egui::ComboBox::from_id_salt(("view-visual-style", view_id.0))
