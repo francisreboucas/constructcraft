@@ -44,6 +44,8 @@ impl Vertex {
 /// GPU-ready triangles and edge lines.
 #[derive(Debug, Clone, Default)]
 pub struct SceneMesh {
+    /// World-space origin subtracted before converting positions to GPU precision.
+    pub origin: DVec3,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     /// Triangles of transparent solids, drawn last with blending.
@@ -136,6 +138,8 @@ fn complement(hidden: impl Iterator<Item = Range<u32>>) -> Vec<Range<u32>> {
 #[derive(Debug, Clone, Default)]
 pub struct Tessellation {
     solids: Vec<SolidTess>,
+    /// Shared horizontal origin of all positions in the tessellation.
+    pub origin: DVec3,
 }
 
 /// The faces of a solid that show one material: all of them, or those
@@ -186,6 +190,14 @@ fn facet_shifts(solid: &cc_geom::Solid) -> Vec<[f64; 2]> {
 
 impl Tessellation {
     pub fn new(geom: &ModelGeometry) -> Self {
+        let origin = geom.bounds().map_or(DVec3::ZERO, |(lo, hi)| {
+            let center = (lo + hi) * 0.5;
+            if center.is_finite() && center.truncate().abs().max_element() > 1024.0 {
+                DVec3::new(center.x.round(), center.y.round(), 0.0)
+            } else {
+                DVec3::ZERO
+            }
+        });
         let mut solids = Vec::new();
         for solid in &geom.solids {
             let part = |look: cc_geom::Look| SolidTess {
@@ -224,12 +236,9 @@ impl Tessellation {
                 let [du, dv] = shifts.get(fi).copied().unwrap_or_default();
                 let start = s.vertices.len() as u32;
                 s.faces.push(start);
-                s.vertices.extend(
-                    face.verts
-                        .iter()
-                        .zip(normals)
-                        .map(|(p, n)| (p.as_vec3().to_array(), n.as_vec3().to_array(), [p.dot(u) + du, p.dot(v) + dv])),
-                );
+                s.vertices.extend(face.verts.iter().zip(normals).map(|(p, n)| {
+                    ((*p - origin).as_vec3().to_array(), n.as_vec3().to_array(), [p.dot(u) + du, p.dot(v) + dv])
+                }));
                 if inner.get(fi) == Some(&true) {
                     continue;
                 }
@@ -241,8 +250,8 @@ impl Tessellation {
                 for (face, edges) in solid.faces.iter().zip(solid.feature_edges()) {
                     let normal = face.normal.as_vec3().to_array();
                     for (a, b) in edges {
-                        first.edges.push((a.as_vec3().to_array(), normal));
-                        first.edges.push((b.as_vec3().to_array(), normal));
+                        first.edges.push(((a - origin).as_vec3().to_array(), normal));
+                        first.edges.push(((b - origin).as_vec3().to_array(), normal));
                     }
                 }
                 // Each edge between smooth facets is listed by both: keep one.
@@ -250,15 +259,19 @@ impl Tessellation {
                     let n = face.normal;
                     for (a, b, other) in seams {
                         if (n.x, n.y, n.z) < (other.x, other.y, other.z) {
-                            let p = |v: glam::DVec3| v.as_vec3().to_array();
-                            first.seams.push([p(a), p(b), p(n), p(other)]);
+                            first.seams.push([
+                                (a - origin).as_vec3().to_array(),
+                                (b - origin).as_vec3().to_array(),
+                                n.as_vec3().to_array(),
+                                other.as_vec3().to_array(),
+                            ]);
                         }
                     }
                 }
             }
             solids.extend(parts.into_iter().filter(|p| !p.triangles.is_empty() || !p.edges.is_empty()));
         }
-        Self { solids }
+        Self { solids, origin }
     }
 }
 
@@ -387,6 +400,7 @@ impl SceneMesh {
     ) -> Self {
         use cc_core::VisualStyle as V;
         let mut mesh = Self {
+            origin: tess.origin,
             unlit: matches!(visual, V::HiddenLine | V::ConsistentColors),
             grey: visual == V::Shaded,
             ..Self::default()
@@ -441,7 +455,7 @@ impl SceneMesh {
     /// the base mesh to draw. Together they draw the triangles and edges of
     /// a mesh built with the selection.
     pub fn highlight(tess: &Tessellation, spans: &[Span], selected: &BTreeSet<ElementId>) -> Highlight {
-        let mut mesh = Self::default();
+        let mut mesh = Self { origin: tess.origin, ..Self::default() };
         let color = [srgb_to_linear(SELECTED[0]), srgb_to_linear(SELECTED[1]), srgb_to_linear(SELECTED[2]), 1.0];
         let hidden: Vec<&Span> = spans.iter().filter(|s| selected.contains(&s.element)).collect();
         for span in &hidden {
@@ -469,21 +483,26 @@ impl SceneMesh {
     /// over the model's solids drawn faint.
     pub fn build_rebar(geom: &ModelGeometry, tess: &Tessellation, selected: &BTreeSet<ElementId>) -> Self {
         let mut mesh = Self::faint(tess);
-        rebar_lines(geom, selected, false, &mut mesh.edges);
+        rebar_lines(geom, selected, false, tess.origin, &mut mesh.edges);
         mesh
     }
 
     /// The bars [`SceneMesh::build_rebar`] highlights, drawn over a mesh
     /// it built with no selection (the same lines, so they win the depth test).
     pub fn rebar_highlight(geom: &ModelGeometry, selected: &BTreeSet<ElementId>) -> Highlight {
-        let mut mesh = Self::default();
-        rebar_lines(geom, selected, true, &mut mesh.edges);
+        Self::rebar_highlight_at(geom, selected, DVec3::ZERO)
+    }
+
+    /// Build selected rebar in the same local frame as its base mesh.
+    pub fn rebar_highlight_at(geom: &ModelGeometry, selected: &BTreeSet<ElementId>, origin: DVec3) -> Highlight {
+        let mut mesh = Self { origin, ..Self::default() };
+        rebar_lines(geom, selected, true, origin, &mut mesh.edges);
         Highlight { mesh, shown: None }
     }
 
     /// The model's solids drawn faint, with no edges.
     fn faint(tess: &Tessellation) -> Self {
-        let mut mesh = Self::default();
+        let mut mesh = Self { origin: tess.origin, ..Self::default() };
         for solid in &tess.solids {
             let base = solid.look.color;
             mesh.add_faces(
@@ -505,12 +524,12 @@ impl SceneMesh {
         selected: &BTreeSet<ElementId>,
     ) -> Self {
         let mut mesh = Self::faint(tess);
-        member_lines(model, selected, false, &mut mesh.edges);
+        member_lines(model, selected, false, tess.origin, &mut mesh.edges);
         for n in &model.nodes {
             let color = if n.support { [0.05, 0.5, 0.1, 1.0] } else { [0.02, 0.02, 0.025, 1.0] };
             let r = 0.08;
             for d in [glam::DVec3::X, glam::DVec3::Y, glam::DVec3::Z] {
-                line(&mut mesh.edges, n.position - d * r, n.position + d * r, color);
+                line(&mut mesh.edges, n.position - d * r, n.position + d * r, tess.origin, color);
             }
         }
         mesh
@@ -522,22 +541,37 @@ impl SceneMesh {
         model: &cc_geom::analytical::AnalyticalModel,
         selected: &BTreeSet<ElementId>,
     ) -> Highlight {
-        let mut mesh = Self::default();
-        member_lines(model, selected, true, &mut mesh.edges);
+        Self::analytical_highlight_at(model, selected, DVec3::ZERO)
+    }
+
+    /// Build selected analytical members in the same local frame as their base mesh.
+    pub fn analytical_highlight_at(
+        model: &cc_geom::analytical::AnalyticalModel,
+        selected: &BTreeSet<ElementId>,
+        origin: DVec3,
+    ) -> Highlight {
+        let mut mesh = Self { origin, ..Self::default() };
+        member_lines(model, selected, true, origin, &mut mesh.edges);
         Highlight { mesh, shown: None }
     }
 }
 
 /// A line from `a` to `b` in `color`.
-fn line(edges: &mut Vec<Vertex>, a: DVec3, b: DVec3, color: [f32; 4]) {
+fn line(edges: &mut Vec<Vertex>, a: DVec3, b: DVec3, origin: DVec3, color: [f32; 4]) {
     let normal = [0.0, 0.0, 1.0];
-    edges.push(Vertex::plain(a.as_vec3().to_array(), normal, color));
-    edges.push(Vertex::plain(b.as_vec3().to_array(), normal, color));
+    edges.push(Vertex::plain((a - origin).as_vec3().to_array(), normal, color));
+    edges.push(Vertex::plain((b - origin).as_vec3().to_array(), normal, color));
 }
 
 /// The bars of the rebar sets (those of the selected hosts or sets
 /// highlighted), or only the highlighted ones.
-fn rebar_lines(geom: &ModelGeometry, selected: &BTreeSet<ElementId>, only_selected: bool, edges: &mut Vec<Vertex>) {
+fn rebar_lines(
+    geom: &ModelGeometry,
+    selected: &BTreeSet<ElementId>,
+    only_selected: bool,
+    origin: DVec3,
+    edges: &mut Vec<Vertex>,
+) {
     for set in geom.rebar.values() {
         let sel = selected.contains(&set.element) || set.host.is_some_and(|h| selected.contains(&h));
         if only_selected && !sel {
@@ -549,7 +583,7 @@ fn rebar_lines(geom: &ModelGeometry, selected: &BTreeSet<ElementId>, only_select
             let segments = if bar.closed { n } else { n.saturating_sub(1) };
             for i in 0..segments {
                 let (Some(a), Some(b)) = (bar.points.get(i), bar.points.get((i + 1) % n)) else { continue };
-                line(edges, *a, *b, color);
+                line(edges, *a, *b, origin, color);
             }
         }
     }
@@ -561,6 +595,7 @@ fn member_lines(
     model: &cc_geom::analytical::AnalyticalModel,
     selected: &BTreeSet<ElementId>,
     only_selected: bool,
+    origin: DVec3,
     edges: &mut Vec<Vertex>,
 ) {
     for m in &model.members {
@@ -577,7 +612,7 @@ fn member_lines(
         };
         // An arc member in short chords.
         for w in model.points(m, cc_core::arc::ARC_STEP).windows(2) {
-            line(edges, w[0], w[1], color);
+            line(edges, w[0], w[1], origin, color);
         }
     }
 }
@@ -585,6 +620,27 @@ fn member_lines(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// Thin geometry retains its width when a model uses survey coordinates.
+    #[test]
+    fn survey_coordinates_keep_thin_faces_precise() {
+        let mut geometry = ModelGeometry::default();
+        let mut solid = cc_geom::Solid::new(ElementId(1), cc_core::Category::Wall, [200; 3]);
+        let center = glam::DVec2::new(417_626.123, 78_712.456);
+        solid.add_box(center, glam::DVec2::X, glam::DVec2::Y, -0.005, 0.005, -0.5, 0.5, 0.0, 2.0);
+        geometry.solids.push(solid);
+        let tessellation = Tessellation::new(&geometry);
+        let mesh = SceneMesh::build_plain(&tessellation, &BTreeSet::new());
+        assert!(mesh.origin.x > 400_000.0);
+        let x = mesh.vertices.iter().map(|vertex| vertex.pos[0]);
+        let (low, high) =
+            x.fold((f32::INFINITY, f32::NEG_INFINITY), |(low, high), value| (low.min(value), high.max(value)));
+        assert!(((high - low) - 0.01).abs() < 1e-5, "thin face width: {}", high - low);
+        assert_eq!(
+            SceneMesh::highlight(&tessellation, &mesh.spans, &BTreeSet::from([ElementId(1)])).mesh.origin,
+            mesh.origin
+        );
+    }
 
     /// A round column, 1 m in radius and 4 m tall, of 24 smooth facets (no ends).
     pub(crate) fn column() -> ModelGeometry {

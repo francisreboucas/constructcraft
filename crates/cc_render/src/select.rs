@@ -26,7 +26,8 @@ pub fn elements_in_rect(
     shown: &mut dyn FnMut(ElementId) -> bool,
 ) -> Vec<ElementId> {
     let (lo, hi) = (lo.min(hi), lo.max(hi));
-    let m = view_proj(cam, aspect).as_dmat4();
+    let local_camera = CameraState { target: glam::DVec3::ZERO, ..*cam };
+    let m = view_proj(&local_camera, aspect).as_dmat4();
     // Per element: whether every solid so far lies inside (window) or any reaches in (crossing).
     let mut inside: BTreeMap<ElementId, bool> = BTreeMap::new();
     let mut shown_cache: BTreeMap<ElementId, bool> = BTreeMap::new();
@@ -36,9 +37,9 @@ pub fn elements_in_rect(
         }
         let entry = inside.entry(solid.element).or_insert(window);
         if window {
-            *entry = *entry && solid_inside(solid, &m, lo, hi);
+            *entry = *entry && solid_inside(solid, &m, cam.target, lo, hi);
         } else if !*entry {
-            *entry = solid_reaches(solid, &m, lo, hi);
+            *entry = solid_reaches(solid, &m, cam.target, lo, hi);
         }
     }
     let taken: BTreeSet<ElementId> = inside.into_iter().filter_map(|(id, ok)| ok.then_some(id)).collect();
@@ -54,17 +55,17 @@ fn in_rect(p: DVec2, lo: DVec2, hi: DVec2) -> bool {
 }
 
 /// Every vertex in front of the camera and inside the rectangle.
-fn solid_inside(solid: &Solid, m: &glam::DMat4, lo: DVec2, hi: DVec2) -> bool {
+fn solid_inside(solid: &Solid, m: &glam::DMat4, origin: glam::DVec3, lo: DVec2, hi: DVec2) -> bool {
     solid.faces.iter().flat_map(|f| f.verts.iter()).all(|&p| {
-        let c = clip(m, p);
+        let c = clip(m, p - origin);
         c.w > MIN_W && in_rect(DVec2::new(c.x / c.w, c.y / c.w), lo, hi)
     })
 }
 
 /// Some face, clipped to the part in front of the camera, overlaps the rectangle.
-fn solid_reaches(solid: &Solid, m: &glam::DMat4, lo: DVec2, hi: DVec2) -> bool {
+fn solid_reaches(solid: &Solid, m: &glam::DMat4, origin: glam::DVec3, lo: DVec2, hi: DVec2) -> bool {
     solid.faces.iter().any(|f| {
-        let polygon = front_part(f.verts.iter().map(|&p| clip(m, p)));
+        let polygon = front_part(f.verts.iter().map(|&p| clip(m, p - origin)));
         polygon_meets_rect(&polygon, lo, hi)
     })
 }
@@ -177,6 +178,28 @@ mod tests {
         let d = DVec2::splat(1e-3);
         assert_eq!(take(&solids, &cam, c - d, c + d, false), vec![2]);
         assert!(take(&solids, &cam, c - d, c + d, true).is_empty());
+    }
+
+    /// Window selection stays the same after translating a model far from the origin.
+    #[test]
+    fn survey_coordinates_preserve_window_selection() {
+        let camera = top_camera();
+        let solids = [cube(1, -3.0), cube(2, 0.0), cube(3, 3.0)];
+        let low = DVec2::splat(-0.2);
+        let high = DVec2::splat(0.2);
+        let expected = take(&solids, &camera, low, high, true);
+        let offset = DVec3::new(417_626.123, 78_712.456, 0.0);
+        let mut shifted = solids;
+        for solid in &mut shifted {
+            for face in &mut solid.faces {
+                for vertex in &mut face.verts {
+                    *vertex += offset;
+                }
+            }
+        }
+        let shifted_camera = CameraState { target: camera.target + offset, ..camera };
+        assert_eq!(take(&shifted, &shifted_camera, low, high, true), expected);
+        assert_eq!(expected, vec![2]);
     }
 
     #[test]

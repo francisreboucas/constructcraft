@@ -339,10 +339,14 @@ impl Scene {
             Mode::Model => {
                 self.tessellation.as_ref().map(|(_, tess)| SceneMesh::highlight(tess, &self.spans, selection))
             }
-            Mode::Analytical => {
-                self.analytical.as_ref().map(|(_, model)| SceneMesh::analytical_highlight(model, selection))
+            Mode::Analytical => self.analytical.as_ref().map(|(_, model)| {
+                let origin = self.tessellation.as_ref().map_or(DVec3::ZERO, |(_, tess)| tess.origin);
+                SceneMesh::analytical_highlight_at(model, selection, origin)
+            }),
+            Mode::Rebar => {
+                let origin = self.tessellation.as_ref().map_or(DVec3::ZERO, |(_, tess)| tess.origin);
+                Some(SceneMesh::rebar_highlight_at(session.geom_for(view_id), selection, origin))
             }
-            Mode::Rebar => Some(SceneMesh::rebar_highlight(session.geom_for(view_id), selection)),
         };
         sink.set_highlight(highlight.as_ref());
         self.highlight = Some((base, sel));
