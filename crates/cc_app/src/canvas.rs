@@ -336,6 +336,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     crate::dim_edit::show(ui, state, view_id);
     crate::text_tool::show(ui, state, view_id);
     temporary_frame(ui, state, rect, view_id);
+    crate::visual_style_ui::show(ui, state, view_id, rect);
     let nav = state.view2d.get(&view_id).map(View2DState::nav).unwrap_or_default();
     if let Some(cmd) = view_toolbar(ui, state.zoom_default, rect, view_id, Some(view.scale), nav) {
         zoom(state, view_id, cmd, 1000.0 / view.scale.max(1) as f64);

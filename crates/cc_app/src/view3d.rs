@@ -698,6 +698,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId, render_state: Op
         crate::phases_dialog::demolish(state, view_id, &ids);
     }
     crate::canvas::temporary_frame(ui, state, rect, view_id);
+    crate::visual_style_ui::show(ui, state, view_id, rect);
     if let Some(cmd) = crate::canvas::view_toolbar(ui, state.zoom_default, rect, view_id, None, nav) {
         crate::canvas::zoom(state, view_id, cmd, 1.0);
         ui.ctx().request_repaint();
