@@ -8,7 +8,7 @@ use crate::{actions, canvas, dialogs, ribbon, schedule_ui, sheet, t, theme, view
 use cc_core::{Document, Project, ViewCategory, ViewId};
 use egui::{Event, Key, Modifiers, Ui, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
-use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
+use egui_dock::{DockArea, DockState, NodeIndex, Surface, SurfaceIndex, TabViewer, Tree};
 
 /// Command-line options.
 #[derive(Debug, Default, Clone)]
@@ -145,11 +145,20 @@ fn named_dock(views: &[ViewId]) -> DockState<ViewId> {
     dock
 }
 
-/// Active tab of the focused leaf, if any.
+/// Active tab of the focused leaf, if any. egui_dock's focus lookups panic
+/// when the focused surface has no tree, so the main surface always gets
+/// one back; and when the focus was left on a surface emptied by a drag (the
+/// only tab dragged into a floating window, #485), the first tab's leaf
+/// takes it.
 fn active_tab(dock: &mut DockState<ViewId>) -> Option<ViewId> {
-    // With no tabs left the main surface has no tree, and egui_dock's focus
-    // lookups panic on it, so only ask when a tab exists.
-    dock.iter_all_tabs().next()?;
+    if let Some(main @ Surface::Empty) = dock.get_surface_mut(SurfaceIndex::main()) {
+        *main = Surface::Main(Tree::new(Vec::new()));
+    }
+    if let Some((_, tab)) = dock.find_active_focused() {
+        return Some(*tab);
+    }
+    let first = dock.iter_all_tabs().next()?.0;
+    dock.set_focused_node_and_surface(first.node_path());
     dock.find_active_focused().map(|(_, tab)| *tab)
 }
 
@@ -712,10 +721,28 @@ pub(crate) fn sync_tabs(dock: &mut DockState<ViewId>, state: &mut AppState) {
 /// and a bar whose index is past the end draws no view at all (#431). The
 /// active tab stays active; when it was closed, the tab now at its place
 /// (or the bar's last) takes over.
-fn retain_tabs(dock: &mut DockState<ViewId>, keep: impl FnMut(&mut ViewId) -> bool) {
+///
+/// Tabs are pruned surface by surface, not with `DockState::retain_tabs`:
+/// that one turns an emptied main surface into one without a tree and
+/// shifts the indices of the windows after an emptied one, both of which
+/// leave the focus on a surface that egui_dock then panics on (#485).
+/// Emptied windows are removed with `remove_surface`, last first, which
+/// keeps the other indices and moves the focus to the main surface.
+fn retain_tabs(dock: &mut DockState<ViewId>, mut keep: impl FnMut(&mut ViewId) -> bool) {
     let active: Vec<ViewId> =
         dock.iter_leaves().filter_map(|(_, leaf)| leaf.tabs.get(leaf.active.0).copied()).collect();
-    dock.retain_tabs(keep);
+    let mut emptied = Vec::new();
+    for (index, surface) in dock.iter_surfaces_mut_indexed() {
+        if let Some(tree) = surface.node_tree_mut() {
+            tree.retain_tabs(&mut keep);
+            if tree.is_empty() && !index.is_main() {
+                emptied.push(index);
+            }
+        }
+    }
+    for index in emptied.into_iter().rev() {
+        dock.remove_surface(index);
+    }
     for (_, leaf) in dock.iter_leaves_mut() {
         let index = match leaf.tabs.iter().position(|tab| active.contains(tab)) {
             Some(kept) => kept,
@@ -763,6 +790,39 @@ mod tests {
         // Opening a view again recreates the tree.
         dock.push_to_focused_leaf(ViewId(2));
         assert_eq!(active_tab(&mut dock), Some(ViewId(2)));
+    }
+
+    /// Dragging the only tab out of the main area into a floating window
+    /// left the main surface without a tree but still focused, and the next
+    /// focus lookup panicked (#485). The tab in the window stays the active
+    /// view, and closing it too leaves none.
+    #[test]
+    fn dragging_the_only_tab_into_a_window_keeps_it_active() {
+        let mut state = AppState::new(cc_core::Document::new(crate::home::sample_project("casa_simples").unwrap()));
+        state.project_open = true;
+        state.show_home = false;
+        let view = *state.project().views.keys().next().unwrap();
+        let mut dock = DockState::new(vec![view]);
+        sync_tabs(&mut dock, &mut state);
+        let path = dock.find_tab(&view).unwrap();
+        dock.set_focused_node_and_surface(path.node_path());
+        dock.detach_tab(path, egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+        for _ in 0..3 {
+            sync_tabs(&mut dock, &mut state);
+        }
+        assert_eq!((state.active_view, state.open_tabs), (Some(view), 1));
+        // Opening another view puts it next to the focused one.
+        let other = *state.project().views.keys().nth(1).unwrap();
+        state.open_view(other);
+        sync_tabs(&mut dock, &mut state);
+        assert_eq!((state.active_view, state.open_tabs), (Some(other), 2));
+        // Closing every tab leaves no active view and no panic.
+        state.tab_bar.close = vec![view, other];
+        sync_tabs(&mut dock, &mut state);
+        assert_eq!((state.active_view, state.open_tabs), (None, 0));
+        state.open_view(view);
+        sync_tabs(&mut dock, &mut state);
+        assert_eq!((state.active_view, state.open_tabs), (Some(view), 1));
     }
 
     /// Closing the last view closes the project and goes back to the home

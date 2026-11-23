@@ -140,13 +140,7 @@ pub(crate) fn wall_bars(g: &WallGeom, r: &Rebar, d: f64, sets: &WallSets) -> Vec
                         }
                         let (u0, u1) = (a + from / k, a + to / k);
                         let points = g.path(u0, u1, v).into_iter().map(|p| p.extend(z)).collect();
-                        bars.push(Bar {
-                            points,
-                            closed: false,
-                            true_length: g.arc.is_some().then_some(to - from),
-                            hooks: None,
-                            helix: None,
-                        });
+                        bars.push(Bar { true_length: g.arc.is_some().then_some(to - from), ..Bar::new(points, false) });
                     }
                 }
             }
@@ -200,7 +194,10 @@ pub(crate) fn wall_bars(g: &WallGeom, r: &Rebar, d: f64, sets: &WallSets) -> Vec
             let (cover_in, d_in) = sets.interior.unwrap_or((h.cover, dh));
             let v0 = line(g, WallSide::Exterior, h.cover.min(vs.cover) + dh.min(dv) / 2.0);
             let v1 = line(g, WallSide::Interior, cover_in + d_in / 2.0);
-            let hooks: f64 = hooks.iter().map(|a| crate::rebar::hook(a.to_radians(), d)).sum();
+            // From the exterior face to the interior one, the hooks bent to
+            // opposite sides of the tie (an S), each around the bar it holds.
+            let ends = crate::rebar::EndHooks::of_tie(hooks[0].to_radians(), hooks[1].to_radians(), d, true);
+            let hooks = ends.length();
             let range = (g.start_ext.0, g.end_ext.0);
             let us: Vec<f64> =
                 stations(range, *spacing, *offset, vs.cover).into_iter().step_by(*every_vertical as usize).collect();
@@ -221,11 +218,9 @@ pub(crate) fn wall_bars(g: &WallGeom, r: &Rebar, d: f64, sets: &WallSets) -> Vec
                     }
                     let points = vec![g.world(u, v0).extend(z), g.world(u, v1).extend(z)];
                     bars.push(Bar {
-                        points,
-                        closed: false,
                         true_length: Some((v0 - v1).abs() + hooks),
-                        hooks: None,
-                        helix: None,
+                        end_hooks: Some(ends),
+                        ..Bar::new(points, false)
                     });
                 }
             }

@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - A bar tag in a section drew every bar of the set it tags, also those beyond the section's depth and its line's ends (the bars of a whole arc wall beside a section of it). The set's bars are now drawn within the view's range, as *Show Reinforcement* draws them, cut bars as dots.
+- Cross-ties showed as straight bars in bending schedules (#438). The ties of a column (`rebar_create` `ties`) and of a wall (`wall_rebar_create` `ties`) counted their two hooks in their length but were read as one straight leg as long as the whole bar, so a 20 cm tie of 5 mm bar was written `straight 32`. A tie now carries its hooks as a stirrup does: its shape is the bar between the bars it holds with a hook leg at each end, bent by the hook's angle, both to one side in a column (a C) and to opposite sides in a wall (an S). The bending schedule writes it `tie 20 hook 135° 5 hook 180° 5` and sketches it with its hooks, bar marks tell C and S ties and different hooks apart, and lengths and weights are unchanged. Since a tie's shape changes, a project whose bar marks were frozen (`bar_marks_update`) gives its ties a new mark the next time marks are updated, and the old mark, matching no bar any more, stays listed until `bar_marks_update` `drop_unused`; marks already issued on drawings should be checked.
 
 ## [0.14.0] - 2026-11-22
 

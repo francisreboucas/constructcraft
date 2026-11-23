@@ -62,6 +62,9 @@ pub struct Bar {
     /// The coil an open bar winds along when it is a spiral (its center line
     /// is the coil in chords and `true_length` the coil's exact length).
     pub helix: Option<Helix>,
+    /// The hooks at the two ends of an open bar (a cross-tie), counted in
+    /// its `true_length` but not drawn in its center line.
+    pub end_hooks: Option<EndHooks>,
 }
 
 /// A spiral's coil: its center-line radius, its rise per turn and its
@@ -115,10 +118,39 @@ impl LoopHooks {
     }
 }
 
+/// The hooks at the ends of an open bar, at its first point (`start`) and
+/// its last (`end`): each turns by its `angle` around a pin and runs its
+/// `tail` straight, as a stirrup's hooks do. Both bend to the same side of
+/// the bar (a C-shaped tie), or to opposite sides when `opposite` (an
+/// S-shaped tie). The bar's center line runs between the bars it ties, and
+/// its `true_length` adds the two hooks.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EndHooks {
+    pub start: LoopHooks,
+    pub end: LoopHooks,
+    pub opposite: bool,
+}
+
+impl EndHooks {
+    /// The hooks of a tie of bars `d` thick turning by `start` and `end`
+    /// radians: each bent around a pin three bar diameters across, then a
+    /// straight end of five diameters (at least 5 cm).
+    pub fn of_tie(start: f64, end: f64, d: f64, opposite: bool) -> Self {
+        let tail = (5.0 * d).max(cc_core::StirrupHooks::MIN_TAIL_LENGTH);
+        let one = |angle: f64| LoopHooks { angle, radius: PIN_RADIUS * d, tail };
+        Self { start: one(start), end: one(end), opposite }
+    }
+
+    /// Length of the two hooks: their bends and their straight ends.
+    pub fn length(&self) -> f64 {
+        self.start.hook_length() + self.end.hook_length()
+    }
+}
+
 impl Bar {
     /// A bar along straight segments.
     pub fn new(points: Vec<DVec3>, closed: bool) -> Self {
-        Self { points, closed, true_length: None, hooks: None, helix: None }
+        Self { points, closed, true_length: None, hooks: None, helix: None, end_hooks: None }
     }
 
     /// The length of the bar: its center line (or true length) and its hooks.
@@ -1069,13 +1101,6 @@ struct ColumnFrame {
 /// three bar diameters across.
 const PIN_RADIUS: f64 = 2.0;
 
-/// Length of a tie's hook bent by `turn` radians: the bend around a pin
-/// three bar diameters across, then a straight end of five diameters (at
-/// least 5 cm).
-pub(crate) fn hook(turn: f64, d: f64) -> f64 {
-    turn * PIN_RADIUS * d + (5.0 * d).max(cc_core::StirrupHooks::MIN_TAIL_LENGTH)
-}
-
 /// `outline` (a closed loop, counter-clockwise) from its sharpest convex
 /// corner, where a stirrup's hooks go: the corner that turns furthest
 /// inward, the first of those alike (a loop without one as it is).
@@ -1216,11 +1241,9 @@ fn column_bars(
             stations(base + r.cover, top - r.cover, spacing)
                 .into_iter()
                 .map(|z| Bar {
-                    points: outline.iter().map(|p| place(*p, z)).collect(),
-                    closed: true,
                     true_length: length,
                     hooks,
-                    helix: None,
+                    ..Bar::new(outline.iter().map(|p| place(*p, z)).collect(), true)
                 })
                 .collect()
         }
@@ -1249,7 +1272,8 @@ fn column_bars(
                     ties.push((bar.at, to));
                 }
             }
-            let hooks = hook(0.75 * std::f64::consts::PI, d) + hook(std::f64::consts::PI, d);
+            let ends = EndHooks::of_tie(0.75 * std::f64::consts::PI, std::f64::consts::PI, d, false);
+            let hooks = ends.length();
             let mut out = Vec::new();
             for z in stations(base + r.cover, top - r.cover, spacing) {
                 for (a, b) in &ties {
@@ -1257,7 +1281,11 @@ fn column_bars(
                         return out;
                     }
                     let points = vec![place(*a, z), place(*b, z)];
-                    out.push(Bar { true_length: Some(a.distance(*b) + hooks), ..Bar::new(points, false) });
+                    out.push(Bar {
+                        true_length: Some(a.distance(*b) + hooks),
+                        end_hooks: Some(ends),
+                        ..Bar::new(points, false)
+                    });
                 }
             }
             out

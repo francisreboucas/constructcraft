@@ -16,6 +16,7 @@
 //! length; sketched as a few turns of a zigzag), legs
 //! of arcs as `(R=… L=…)`, and a loop closed by hooks as the loop's code with
 //! each hook's angle and straight end (`stirrup 14x44 hook 135° 5 hook 135°
+//! 5`), a tie as its length with its hooks (`tie 20 hook 135° 5 hook 180°
 //! 5`); lengths as [`format::bar_length`] writes them.
 //! Sheets draw a sketch instead ([`BarSketch`]): the bar's legs laid flat in
 //! order, to proportion (very short straight legs drawn longer), normalized
@@ -38,6 +39,8 @@ pub const SKETCH_WIDTH: f64 = 46.0;
 pub const SKETCH_TEXT: f64 = 1.8;
 /// A straight leg shorter than this share of the longest is drawn this long.
 const SHORTEST_LEG: f64 = 0.15;
+/// The pin a tie's hooks are drawn bent around, a share of the longest leg.
+const TIE_PIN: f64 = 0.04;
 /// At most this many legs of a shape are drawn.
 const MAX_SKETCH_LEGS: usize = 256;
 
@@ -75,17 +78,28 @@ fn spiral_text(l: &LegSummary) -> String {
 /// Turns of a coil drawn in a sketch, at most.
 const SKETCH_TURNS: f64 = 6.0;
 
+/// Each hook's angle and straight end: `hook 135° 5 hook 180° 5`.
+fn hook_codes(hooks: &[LegSummary; 2]) -> String {
+    hooks
+        .iter()
+        .map(|h| format!("hook {}° {}", format::trimmed(h.bend.abs().to_degrees(), 0), format::bar_length(h.length)))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// The code of a shape (see the module's documentation).
 pub fn shape_code(shape: &ShapeSummary) -> String {
     // A loop closed by hooks: the loop's code, then each hook's angle and straight end.
     if let Some((closed, hooks)) = shape.hooked_loop() {
-        let hooks: Vec<String> = hooks
-            .iter()
-            .map(|h| {
-                format!("hook {}° {}", format::trimmed(h.bend.abs().to_degrees(), 0), format::bar_length(h.length))
-            })
-            .collect();
-        return format!("{} {}", shape_code(&closed), hooks.join(" "));
+        return format!("{} {}", shape_code(&closed), hook_codes(&hooks));
+    }
+    // A tie: its bar's code (a straight one as `tie`), then each hook's angle and straight end.
+    if let Some((bar, hooks)) = shape.hooked_ends() {
+        let code = match bar.legs.as_slice() {
+            [one] if one.radius.is_none() => format!("tie {}", format::bar_length(one.length)),
+            _ => shape_code(&bar),
+        };
+        return format!("{code} {}", hook_codes(&hooks));
     }
     // The shorter end leg first.
     let (first, last) = (shape.legs.first().map_or(0.0, |l| l.length), shape.legs.last().map_or(0.0, |l| l.length));
@@ -128,11 +142,18 @@ pub fn shape_code(shape: &ShapeSummary) -> String {
 pub fn sketch_of(shape: &ShapeSummary) -> BarSketch {
     let longest = shape.legs.iter().filter(|l| l.radius.is_none()).map(|l| l.length).fold(0.0, f64::max);
     let hooked = shape.hooked_loop().is_some();
+    // A tie's hooks are written in its code too.
+    let tie = shape.hooked_ends().is_some();
     let least = if shape.closed { 0.0 } else { SHORTEST_LEG * longest };
     let mut at = DVec2::ZERO;
     let mut heading = 0.0_f64;
     let mut legs: Vec<Vec<DVec2>> = Vec::new();
-    for leg in shape.legs.iter().take(MAX_SKETCH_LEGS) {
+    // A tie's hooks are bent around a small pin, so that a 180° hook stands
+    // off the bar: the bend drawn with the hook leg, before or after it.
+    let pin = TIE_PIN * longest;
+    let mut bend_before: Vec<DVec2> = Vec::new();
+    let all = &shape.legs[..shape.legs.len().min(MAX_SKETCH_LEGS)];
+    for (i, leg) in all.iter().enumerate() {
         let dir = DVec2::from_angle(heading);
         // The legs of a hooked loop keep their lengths, so that it closes.
         let least = if hooked && !leg.hook { 0.0 } else { least };
@@ -163,7 +184,27 @@ pub fn sketch_of(shape: &ShapeSummary) -> BarSketch {
                 vec![at, at + dir * drawn]
             }
         };
+        let mut points = if bend_before.is_empty() {
+            points
+        } else {
+            std::mem::take(&mut bend_before).into_iter().chain(points.into_iter().skip(1)).collect()
+        };
         at = points.last().copied().unwrap_or(at);
+        let next_hook = all.get(i + 1).is_some_and(|l| l.hook);
+        if tie && (leg.hook || next_hook) && leg.bend != 0.0 && pin > 0.0 {
+            let dir = DVec2::from_angle(heading);
+            let center = at + dir.perp() * (pin * leg.bend.signum());
+            let from = at - center;
+            let n = ((leg.bend.abs() / 15f64.to_radians()).ceil() as usize).clamp(2, 12);
+            let arc: Vec<DVec2> =
+                (0..=n).map(|k| center + DVec2::from_angle(leg.bend * k as f64 / n as f64).rotate(from)).collect();
+            at = arc.last().copied().unwrap_or(at);
+            if leg.hook {
+                points.extend(arc.into_iter().skip(1));
+            } else {
+                bend_before = arc;
+            }
+        }
         heading += leg.bend;
         legs.push(points);
     }
@@ -195,8 +236,8 @@ pub fn sketch_of(shape: &ShapeSummary) -> BarSketch {
     let centroid = centroid_of(&legs);
     let mut labels = Vec::new();
     for (leg, pts) in shape.legs.iter().zip(&legs) {
-        // A stirrup's hooks are written in its code, not dimensioned as legs.
-        if hooked && leg.hook {
+        // The hooks of a stirrup or a tie are written in its code, not dimensioned as legs.
+        if (hooked || tie) && leg.hook {
             continue;
         }
         let (Some(&a), Some(&b)) = (pts.first(), pts.last()) else { continue };
@@ -561,6 +602,36 @@ mod tests {
             .fold((DVec2::INFINITY, DVec2::NEG_INFINITY), |(a, b), p| (a.min(*p), b.max(*p)));
         let inside = |p: DVec2| p.x > lo.x - 1e-9 && p.x < hi.x + 1e-9 && p.y > lo.y - 1e-9 && p.y < hi.y + 1e-9;
         assert!(inside(s.legs[0][0]) && inside(s.legs[5][1]), "{:?}", s.legs);
+    }
+
+    /// A 5 mm tie 20 cm between the bars it holds, hooked by 135° and 180°
+    /// (an S when `opposite`).
+    fn tie(opposite: bool) -> ShapeSummary {
+        use std::f64::consts::PI;
+        let ends = cc_geom::rebar::EndHooks::of_tie(0.75 * PI, PI, 0.005, opposite);
+        let points = vec![DVec3::ZERO, DVec3::new(0.0, 0.2, 0.0)];
+        summary(&Bar { true_length: Some(0.2 + ends.length()), end_hooks: Some(ends), ..Bar::new(points, false) })
+    }
+
+    #[test]
+    fn ties_have_codes_and_sketches() {
+        format::set_units(&cc_core::Units::default());
+        // Not `straight 32`, the length of the bar with its hooks.
+        assert_eq!(shape_code(&tie(false)), "tie 20 hook 135° 5 hook 180° 5");
+        assert_eq!(shape_code(&tie(true)), "tie 20 hook 135° 5 hook 180° 5");
+        assert_eq!(shape_code(&cc_geom::bar_marks::canonical(&tie(true))).split(' ').next(), Some("tie"));
+        // The sketch: the bar and its two hooks, only the bar labelled.
+        for opposite in [false, true] {
+            let s = sketch_of(&tie(opposite));
+            assert_eq!(s.legs.len(), 3);
+            let texts: Vec<&str> = s.labels.iter().map(|l| l.text.as_str()).collect();
+            assert_eq!(texts, ["20"]);
+            // A C has both hooks on one side of the bar, an S one on each.
+            let bar_y = s.legs[1][0].y;
+            let (a, b) = (s.legs[0][0].y - bar_y, s.legs[2][1].y - bar_y);
+            assert!(a.abs() > 1e-9 && b.abs() > 1e-9);
+            assert_eq!(a * b < 0.0, opposite, "{:?}", s.legs);
+        }
     }
 
     #[test]

@@ -1,12 +1,12 @@
 //! The shape of a bar as a bending schedule describes it: open or closed,
 //! its legs in order with their lengths, the radii and turns of arc legs
 //! and the bends between legs, read from the bar's center line (and the
-//! hooks that close a stirrup, as legs marked `hook`). Independent
+//! hooks that close a stirrup or end a tie, as legs marked `hook`). Independent
 //! of where the bar lies, so bars of one shape compare equal wherever they
 //! are ([`ShapeSummary::matches`]).
 
-use crate::rebar::{Bar, LoopHooks};
-use glam::DVec3;
+use crate::rebar::{Bar, EndHooks, LoopHooks};
+use glam::{DVec2, DVec3};
 
 /// Segments shorter than this are no segments.
 const MIN_SEGMENT: f64 = 1e-7;
@@ -127,8 +127,15 @@ impl ShapeSummary {
 /// loop closed by hooks (a stirrup's [`Bar::hooks`]) is read from the corner
 /// they close it at, and opened there by a hook leg at each end. A spiral
 /// ([`Bar::helix`]) is one coiled leg: its radius, its turns as the sweep,
-/// its pitch and its exact length.
+/// its pitch and its exact length. An open bar with hooks at its ends
+/// ([`Bar::end_hooks`], a tie) has a hook leg before and after its center
+/// line's legs.
 pub fn summary(bar: &Bar) -> ShapeSummary {
+    if let Some(ends) = bar.end_hooks.filter(|_| !bar.closed) {
+        // The center line without the hooks its true length counts.
+        let line = summary(&Bar { true_length: None, end_hooks: None, ..bar.clone() });
+        return with_end_hooks(line, &ends);
+    }
     if let Some(h) = bar.helix.filter(|h| h.is_valid() && !bar.closed) {
         let leg = LegSummary {
             length: bar.length(),
@@ -297,14 +304,64 @@ fn hooked(mut shape: ShapeSummary, hooks: &LoopHooks) -> ShapeSummary {
     ShapeSummary { closed: false, legs }
 }
 
+/// An open bar with a hook at each end: a hook leg bent by its angle into
+/// the bar's first leg, the bar's legs, the last bent by the end hook's
+/// angle (the same way as the first, or the other way for an S), and the
+/// end hook leg. As in a stirrup, a hook's bend around its pin is no leg.
+fn with_end_hooks(mut shape: ShapeSummary, ends: &EndHooks) -> ShapeSummary {
+    if shape.closed || shape.legs.is_empty() {
+        return shape;
+    }
+    // The way the bar first turns, if it does; else either.
+    let way = shape.legs.iter().map(|l| l.bend + l.sweep).find(|t| t.abs() > 0.0).map_or(1.0, f64::signum);
+    let start = way * ends.start.angle;
+    let end = if ends.opposite { -way } else { way } * ends.end.angle;
+    let hook = |h: &LoopHooks, bend: f64| LegSummary {
+        length: h.tail,
+        radius: None,
+        sweep: 0.0,
+        bend,
+        hook: true,
+        pitch: 0.0,
+    };
+    if let Some(last) = shape.legs.last_mut() {
+        last.bend = end;
+    }
+    let mut legs = Vec::with_capacity(shape.legs.len() + 2);
+    legs.push(hook(&ends.start, start));
+    legs.append(&mut shape.legs);
+    legs.push(hook(&ends.end, 0.0));
+    ShapeSummary { closed: false, legs }
+}
+
+/// Whether `legs`, laid one after another with their bends, end where they
+/// start (within a twentieth of their length).
+fn closes(legs: &[LegSummary]) -> bool {
+    let (mut at, mut heading, mut total) = (DVec2::ZERO, 0.0_f64, 0.0);
+    for l in legs {
+        match l.radius.filter(|_| l.sweep != 0.0) {
+            Some(r) => {
+                let chord = 2.0 * r * (l.sweep.abs() / 2.0).sin();
+                at += DVec2::from_angle(heading + l.sweep / 2.0) * chord;
+                heading += l.sweep;
+            }
+            None => at += DVec2::from_angle(heading) * l.length,
+        }
+        heading += l.bend;
+        total += l.length;
+    }
+    total > 0.0 && at.length() <= 0.05 * total
+}
+
 impl ShapeSummary {
     /// The loop a stirrup's hooks close, when the shape is one (a hook leg,
-    /// legs of no hook, a hook leg): those legs as a closed shape, the turn at
-    /// its closing corner being what the others leave of a whole turn; and
-    /// the two hook legs, each with the bend of its hook as `bend`.
+    /// legs of no hook that close on themselves, a hook leg): those legs as
+    /// a closed shape, the turn at its closing corner being what the others
+    /// leave of a whole turn; and the two hook legs, each with the bend of
+    /// its hook as `bend`.
     pub fn hooked_loop(&self) -> Option<(ShapeSummary, [LegSummary; 2])> {
         let ([first, middle @ .., last], false) = (self.legs.as_slice(), self.closed) else { return None };
-        if !(first.hook && last.hook) || middle.is_empty() || middle.iter().any(|l| l.hook) {
+        if !(first.hook && last.hook) || middle.is_empty() || middle.iter().any(|l| l.hook) || !closes(middle) {
             return None;
         }
         let mut legs = middle.to_vec();
@@ -318,6 +375,24 @@ impl ShapeSummary {
             l.bend = if closing.abs() < 1e-9 { 0.0 } else { closing };
         }
         Some((ShapeSummary { closed: true, legs }, [*first, end]))
+    }
+
+    /// The bar a tie's hooks end, when the shape is one (a hook leg, legs of
+    /// no hook that do not close, a hook leg): those legs as an open shape,
+    /// its last leg bent no more; and the two hook legs, each with the bend
+    /// of its hook as `bend`.
+    pub fn hooked_ends(&self) -> Option<(ShapeSummary, [LegSummary; 2])> {
+        let ([first, middle @ .., last], false) = (self.legs.as_slice(), self.closed) else { return None };
+        if !(first.hook && last.hook) || middle.is_empty() || middle.iter().any(|l| l.hook) || closes(middle) {
+            return None;
+        }
+        let mut legs = middle.to_vec();
+        let mut end = *last;
+        if let Some(l) = legs.last_mut() {
+            end.bend = l.bend;
+            l.bend = 0.0;
+        }
+        Some((ShapeSummary { closed: false, legs }, [*first, end]))
     }
 }
 
@@ -407,6 +482,7 @@ mod tests {
             true_length: Some(2.5 * FRAC_PI_2),
             hooks: None,
             helix: None,
+            end_hooks: None,
         });
         assert_eq!(s.legs.len(), 1);
         let leg = s.legs[0];
@@ -419,13 +495,21 @@ mod tests {
             true_length: None,
             hooks: None,
             helix: None,
+            end_hooks: None,
         });
         assert!(!s.matches(&other, 0.005, 0.01));
         let mirrored: Vec<DVec3> = arc(2.5, FRAC_PI_2, 30).into_iter().map(|p| v(p.x + 3.0, -p.y, 0.0)).collect();
         assert!(s.matches(&summary(&Bar::new(mirrored, false)), 1e-6, 1e-6));
         // A closed ring: one leg, a whole turn, the circle's length.
         let ring: Vec<DVec3> = arc(1.0, TAU, 120).into_iter().take(120).collect();
-        let r = summary(&Bar { points: ring, closed: true, true_length: Some(TAU), hooks: None, helix: None });
+        let r = summary(&Bar {
+            points: ring,
+            closed: true,
+            true_length: Some(TAU),
+            hooks: None,
+            helix: None,
+            end_hooks: None,
+        });
         assert!(r.closed && r.legs.len() == 1 && close(r.legs[0].radius.unwrap(), 1.0) && close(r.length(), TAU));
         // A round tie drawn with 16 chords is a ring too.
         let tie: Vec<DVec3> = arc(0.2, TAU, 16).into_iter().take(16).collect();
@@ -448,9 +532,48 @@ mod tests {
             true_length: Some(0.35),
             hooks: None,
             helix: None,
+            end_hooks: None,
         };
         let s = summary(&tie);
         assert!(s.is_straight() && close(s.length(), 0.35));
+    }
+
+    #[test]
+    fn a_tie_has_a_hook_leg_at_each_end() {
+        // A 5 mm tie 0.20 m between the bars it holds: 135° at its start, 180° at its end.
+        let ends = EndHooks::of_tie(0.75 * PI, PI, 0.005, false);
+        let tie = Bar {
+            true_length: Some(0.2 + ends.length()),
+            end_hooks: Some(ends),
+            ..Bar::new(vec![v(0.0, 0.0, 0.0), v(0.2, 0.0, 0.0)], false)
+        };
+        let s = summary(&tie);
+        assert!(!s.closed && s.legs.len() == 3 && !s.is_straight());
+        let [a, b, c] = [s.legs[0], s.legs[1], s.legs[2]];
+        assert!(a.hook && !b.hook && c.hook);
+        // Straight ends of 5 cm (5 diameters is less), the bar between the hooks 0.20 m.
+        assert!(close(a.length, 0.05) && close(b.length, 0.2) && close(c.length, 0.05));
+        // Both hooks bent the same way (a C), by their angles.
+        assert!(close(a.bend, 0.75 * PI) && close(b.bend, PI) && close(c.bend, 0.0));
+        // The legs add up to the bar's length less the bends around the pins.
+        assert!(close(s.length(), tie.length() - 1.75 * PI * 0.01));
+        // Not a loop: its hooks end a bar.
+        assert!(s.hooked_loop().is_none());
+        let (bar, [h0, h1]) = s.hooked_ends().unwrap();
+        assert!(bar.is_straight() && close(bar.length(), 0.2) && close(bar.legs[0].bend, 0.0));
+        assert!(close(h0.bend, 0.75 * PI) && close(h1.bend, PI));
+        // An S: the end hook bent the other way.
+        let s_tie = Bar { end_hooks: Some(EndHooks { opposite: true, ..ends }), ..tie.clone() };
+        let s2 = summary(&s_tie);
+        assert!(s2.legs[0].bend * s2.legs[1].bend < 0.0);
+        assert!(!s.matches(&s2, 0.005, 0.01));
+        // Read from its other end, the same tie.
+        let back = Bar {
+            points: vec![v(0.2, 0.0, 0.0), v(0.0, 0.0, 0.0)],
+            end_hooks: Some(EndHooks { start: ends.end, end: ends.start, opposite: false }),
+            ..tie.clone()
+        };
+        assert!(s.matches(&summary(&back), 0.005, 0.01));
     }
 
     #[test]

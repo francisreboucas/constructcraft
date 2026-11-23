@@ -109,7 +109,7 @@ pub(crate) fn strip_bars(
                         Some(arc) => {
                             let n = cc_core::arc::segments((b - a) / arc.radius.max(1e-9), cc_core::arc::ARC_STEP);
                             let points = (0..=n).map(|i| at(a + (b - a) * i as f64 / n as f64, v, y)).collect();
-                            Bar { points, closed: false, true_length: Some(to - from), hooks: None, helix: None }
+                            Bar { true_length: Some(to - from), ..Bar::new(points, false) }
                         }
                         None => Bar::new(vec![at(a, v, y), at(b, v, y)], false),
                     });

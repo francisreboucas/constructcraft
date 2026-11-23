@@ -360,7 +360,7 @@ pub(crate) fn slab_bars(slab: &Slab, r: &Rebar, d: f64, other: f64) -> Vec<Bar> 
                                 (center + DVec2::from_angle(a0 + (a1 - a0) * i as f64 / n as f64) * radius).extend(z)
                             })
                             .collect();
-                        bars.push(Bar { points, closed, true_length: Some(to - from), hooks: None, helix: None });
+                        bars.push(Bar { true_length: Some(to - from), ..Bar::new(points, closed) });
                     }
                 }
             }
