@@ -2989,7 +2989,7 @@ impl<'a> Importer<'a> {
     /// vertical extrusion; with `approximate`, other bodies give their hull.
     fn sketch(body: &Body, approximate: bool) -> Option<(Vec<DVec2>, f64, f64, f64)> {
         let (z0, z1) = body.z_range()?;
-        let (footprint, thickness) = match body.sole_extrusion().filter(|e| e.is_vertical()) {
+        let (footprint, thickness) = match body.sole_extrusion().filter(|e| e.is_vertical() && e.has_level_profile()) {
             Some(ex) => (ex.footprint(), ex.vector.z.abs()),
             None if approximate => (convex_hull(&body.points().map(|p| p.truncate()).collect::<Vec<_>>()), z1 - z0),
             None => return None,
@@ -3027,7 +3027,7 @@ impl<'a> Importer<'a> {
         id: u32,
         body: &Body,
     ) -> Option<(Vec<DVec2>, Vec<Vec<DVec2>>, f64, f64, f64, Option<Sketch>)> {
-        let (ex, cuts) = body.slab_extrusion().filter(|(e, _)| e.is_vertical())?;
+        let (ex, cuts) = body.slab_extrusion().filter(|(e, _)| e.is_vertical() && e.has_level_profile())?;
         let (z0, z1) = ex.z_range();
         let mut outline = clean_polygon(ex.footprint());
         if outline.len() < 3 || polygon::area(&outline) <= 1e-4 {
@@ -3039,7 +3039,8 @@ impl<'a> Importer<'a> {
         // An opening passes through the whole slab (a recess would leave part of it).
         let through = |(c0, c1): (f64, f64)| c0 <= z0 + SLAB_TOL && c1 >= z1 - SLAB_TOL;
         for cut in cuts {
-            if !(cut.is_vertical() && cut.profile.holes.is_empty() && through(cut.z_range())) {
+            if !(cut.is_vertical() && cut.has_level_profile() && cut.profile.holes.is_empty() && through(cut.z_range()))
+            {
                 return None;
             }
             openings.push(clean_polygon(cut.footprint()));
@@ -3048,7 +3049,7 @@ impl<'a> Importer<'a> {
         let f = self.f;
         for o in self.openings_of.get(&id).into_iter().flatten() {
             let (_, cutter) = self.product(f.get(*o)?);
-            let cut = cutter.sole_extrusion().filter(|e| e.is_vertical())?;
+            let cut = cutter.sole_extrusion().filter(|e| e.is_vertical() && e.has_level_profile())?;
             if !through(cutter.z_range()?) {
                 return None;
             }
@@ -4275,10 +4276,13 @@ impl<'a> Importer<'a> {
                 }
                 None => main.clone(),
             };
-            let plain = solid
-                .extrusion
-                .as_ref()
-                .filter(|ex| !solid.clipped && ex.is_vertical() && ex.profile.closed && ex.profile.holes.is_empty());
+            let plain = solid.extrusion.as_ref().filter(|ex| {
+                !solid.clipped
+                    && ex.is_vertical()
+                    && ex.has_level_profile()
+                    && ex.profile.closed
+                    && ex.profile.holes.is_empty()
+            });
             let shape = match plain {
                 Some(ex) => {
                     let pts: Vec<DVec2> =

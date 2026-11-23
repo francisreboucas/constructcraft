@@ -17,6 +17,7 @@ mod pipe_fittings;
 mod rebar;
 mod roof_joins;
 mod round_trip;
+mod sloped_slabs;
 mod spline_walls;
 mod tank;
 mod wall_profiles;
