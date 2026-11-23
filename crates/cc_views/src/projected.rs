@@ -945,14 +945,38 @@ pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState)
     d
 }
 
-/// The reinforcing bars seen along the camera, tagged with their sets.
-pub fn rebar(geom: &ModelGeometry, camera: &CameraState) -> Drawing2D {
+/// The reinforcing bars seen along the camera, tagged with their sets, at
+/// `scale` (1:`scale`); a leg of an open bar seen end-on (the vertical bars
+/// of a column seen from above, a starter bar's leg above its foot) is a dot
+/// as wide as the bar, at least [`crate::rebar_view::MIN_DOT`] on paper, as
+/// plans and sections draw it ([`crate::rebar_view::dot`]).
+pub fn rebar(geom: &ModelGeometry, camera: &CameraState, scale: u32) -> Drawing2D {
+    use crate::rebar_view::{END_ON, dot, dot_radius};
     let frame = camera_frame(camera);
+    let k = scale.max(1) as f64 / 1000.0;
     let mut d = Drawing2D::default();
     for set in geom.rebar.values() {
+        let r = dot_radius(set.diameter, k);
         for bar in &set.bars {
             let pts: Vec<DVec2> = bar.points.iter().map(|p| frame.project(*p)).collect();
-            d.polyline(&pts, bar.closed, crate::LineStyle::Projection, Some(set.element));
+            let mut dots: Vec<DVec2> = Vec::new();
+            if !bar.closed {
+                for (w, p) in pts.windows(2).zip(bar.points.windows(2)) {
+                    if w[0].distance(w[1]) < END_ON
+                        && p[0].distance(p[1]) > END_ON
+                        && !dots.iter().any(|q| q.distance(w[0]) < r)
+                    {
+                        dots.push(w[0]);
+                    }
+                }
+            }
+            for at in dots {
+                dot(&mut d, at, r, set.element);
+            }
+            let run: f64 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
+            if run >= END_ON {
+                d.polyline(&pts, bar.closed, crate::LineStyle::Projection, Some(set.element));
+            }
         }
     }
     d

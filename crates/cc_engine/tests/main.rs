@@ -61,6 +61,7 @@ mod plugin_data;
 mod plugin_scope;
 mod profiles;
 mod project_templates;
+mod rebar_3d_view;
 mod rebar_copy;
 mod rebar_in_views;
 mod regions;
