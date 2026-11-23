@@ -593,8 +593,8 @@ impl Drawing2D {
     }
 
     /// The extents to fit the view to: [`bounds`](Self::bounds), or only the
-    /// elements' geometry and the overlay with `fit_elements` (all of it
-    /// when there is none).
+    /// elements' geometry, elevation markers and the overlay with
+    /// `fit_elements` (all of it when there is no element geometry).
     pub fn fit_bounds(&self) -> Option<(DVec2, DVec2)> {
         if !self.fit_elements {
             return self.bounds();
@@ -608,7 +608,12 @@ impl Drawing2D {
             Prim::Image { origin, u, v, .. } => Prim::image_corners(*origin, *u, *v).to_vec(),
         });
         match it.next() {
-            Some(first) => Some(it.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p)))),
+            Some(first) => {
+                let bounds = it.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p)));
+                Some(self.marks.iter().fold(bounds, |(lo, hi), mark| {
+                    (lo.min(mark.center - mark.half * 2.0), hi.max(mark.center + mark.half * 2.0))
+                }))
+            }
             None => self.bounds(),
         }
     }

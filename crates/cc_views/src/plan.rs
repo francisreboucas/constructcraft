@@ -132,7 +132,7 @@ pub(crate) fn plan_drawing(
 ) -> Drawing2D {
     let shown = |e: &cc_core::Element| !structural || is_structural(e);
     let spacing = crate::cut::spacing(scale);
-    // Zoom to fit leaves the elevation and section markers out.
+    // Section lines are excluded from the model's zoom-to-fit bounds.
     let mut d = Drawing2D { fit_elements: true, ..Default::default() };
     let level_z = project.level_elevation(level);
     let cut_z = level_z + cut_height;
@@ -231,7 +231,10 @@ pub(crate) fn plan_drawing(
         draw_columns(&mut d, project, level, (cut_z, spacing, detail), structural);
     }
 
-    if !ceiling && let Some((lo, hi)) = geom.bounds() {
+    if !ceiling {
+        // A new project has no geometry yet, but its elevation views still
+        // need markers around a useful initial building area.
+        let (lo, hi) = geom.bounds().unwrap_or((DVec3::ZERO, DVec3::new(10.0, 8.0, 0.0)));
         // Markers stay outside the grid lines too, which usually extend past the model.
         let grid_ends = project.elements.values().filter_map(|e| match &e.kind {
             ElementKind::Grid(g) => Some([g.start, g.end]),
