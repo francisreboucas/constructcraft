@@ -75,7 +75,8 @@ pub struct Frame {
 impl Frame {
     pub fn new(rect: Rect, camera: CameraState) -> Self {
         let aspect = rect.width() / rect.height().max(1.0);
-        Self { rect, camera, aspect, view_proj: cc_render::view_proj(&camera, aspect) }
+        let local_camera = CameraState { target: DVec3::ZERO, ..camera };
+        Self { rect, camera, aspect, view_proj: cc_render::view_proj(&local_camera, aspect) }
     }
 
     /// The ray through a screen position.
@@ -87,7 +88,8 @@ impl Frame {
 
     /// Where a world point shows on screen; `None` behind the eye.
     pub fn screen(&self, p: DVec3) -> Option<Pos2> {
-        let clip = self.view_proj * Vec4::new(p.x as f32, p.y as f32, p.z as f32, 1.0);
+        let local = (p - self.camera.target).as_vec3();
+        let clip = self.view_proj * local.extend(1.0);
         if clip.w <= 1e-6 {
             return None;
         }
@@ -104,7 +106,7 @@ impl Frame {
     /// (`None` when the whole segment is behind), so a line passing by the
     /// eye is not flung across the screen.
     pub fn segment(&self, a: DVec3, b: DVec3) -> Option<(Pos2, Pos2)> {
-        let clip = |p: DVec3| self.view_proj * Vec4::new(p.x as f32, p.y as f32, p.z as f32, 1.0);
+        let clip = |p: DVec3| self.view_proj * (p - self.camera.target).as_vec3().extend(1.0);
         let (mut ca, mut cb) = (clip(a), clip(b));
         if !(ca.is_finite() && cb.is_finite()) || (ca.z < 0.0 && cb.z < 0.0) {
             return None;
@@ -727,6 +729,20 @@ mod tests {
         let eye = f.camera.eye();
         let behind = eye + (eye - f.camera.target);
         assert!(f.screen(behind).is_none());
+    }
+
+    /// Georeferencing does not shift the projection or the corresponding pointer ray.
+    #[test]
+    fn survey_coordinates_keep_screen_projection_aligned() {
+        let local = frame();
+        let offset = DVec3::new(417_626.123, 78_712.456, 0.0);
+        let shifted_camera = CameraState { target: local.camera.target + offset, ..local.camera };
+        let shifted = Frame::new(local.rect, shifted_camera);
+        let point = DVec3::new(3.0, -2.0, 0.0);
+        let screen = shifted.screen(point + offset).unwrap();
+        assert!(screen.distance(local.screen(point).unwrap()) < 0.01);
+        let hit = ray_plane_z(shifted.ray(screen), point.z).unwrap();
+        assert!(hit.distance(point + offset) < 1e-3, "{hit}");
     }
 
     #[test]

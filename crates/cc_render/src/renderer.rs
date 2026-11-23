@@ -170,6 +170,8 @@ pub struct Renderer3D {
     unlit: bool,
     /// The mesh's faces are shaded grey (see [`SceneMesh::grey`]).
     grey: bool,
+    /// World-space origin shared by the uploaded geometry and camera.
+    origin: glam::DVec3,
     /// The sun, usable (see [`Light::usable`]); `None` lights from the camera.
     light: Option<Light>,
     /// How light the faces turned away are and how dark the shadows (the view's).
@@ -270,6 +272,7 @@ impl Renderer3D {
             drawn: None,
             unlit: false,
             grey: false,
+            origin: glam::DVec3::ZERO,
             light: None,
             shading: Default::default(),
             bounds: None,
@@ -387,6 +390,7 @@ impl Renderer3D {
         self.drawn = None;
         self.unlit = mesh.unlit;
         self.grey = mesh.grey;
+        self.origin = mesh.origin;
         self.highlight = None;
         self.bounds = Bounds::of(mesh.vertices.iter().map(|v| v.pos));
         self.shadows_current = false;
@@ -431,11 +435,13 @@ impl Renderer3D {
     }
 
     /// Draw `highlight` (made for the mesh last uploaded) over that mesh, or
-    /// nothing with `None`; the base mesh's buffers stay as they are.
+    /// nothing with `None`; the base mesh's buffers stay as they are. A
+    /// highlight made around another origin than that mesh's (from another
+    /// tessellation) is not drawn, rather than drawn out of place.
     pub fn set_highlight(&mut self, device: &wgpu::Device, highlight: Option<&Highlight>) {
         self.drawn = None;
         self.highlight = None;
-        let Some(h) = highlight else { return };
+        let Some(h) = highlight.filter(|h| h.mesh.origin == self.origin) else { return };
         let mesh = &h.mesh;
         let largest = [
             std::mem::size_of_val(mesh.vertices.as_slice()),
@@ -523,15 +529,16 @@ impl Renderer3D {
         }
         self.drawn = Some((*camera, size));
         let aspect = size[0] as f32 / size[1] as f32;
+        let local_camera = CameraState { target: camera.target - self.origin, ..*camera };
         let fwd = camera.forward().as_vec3();
         // Sun from behind the viewer's left shoulder, high up.
         let light = (glam::Vec3::new(-fwd.x + 0.4, -fwd.y + 0.3, 1.6)).normalize();
         let u = Uniforms {
-            view_proj: view_proj(camera, aspect).to_cols_array_2d(),
+            view_proj: view_proj(&local_camera, aspect).to_cols_array_2d(),
             light_dir: [light.x, light.y, light.z, 0.0],
             style: [f32::from(u8::from(self.unlit)), f32::from(u8::from(self.grey)), unlit_shadow(&self.shading), 0.0],
             shading: shading(&self.shading),
-            eye: camera.eye().as_vec3().extend(1.0).to_array(),
+            eye: local_camera.eye().as_vec3().extend(1.0).to_array(),
         };
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&u));
         if self.light.is_some() && self.sun.is_none() && !self.sun_failed {
@@ -824,6 +831,34 @@ mod gpu_tests {
         }
         add_box(&mut mesh, Vec3::ZERO, Vec3::new(2.0, 2.0, 4.0), [0.4, 0.5, 0.7, 1.0]);
         mesh
+    }
+
+    /// Rendered geometry and shadows remain stationary on screen after georeferencing.
+    #[test]
+    #[ignore = "needs a GPU adapter"]
+    fn georeferenced_scene_matches_local_scene() {
+        let Some((device, queue)) = gpu() else {
+            eprintln!("no GPU adapter: nothing checked");
+            return;
+        };
+        let make = |offset: DVec3| {
+            let mut geometry = cc_geom::ModelGeometry::default();
+            let mut solid = cc_geom::Solid::new(cc_core::ElementId(1), cc_core::Category::Wall, [160, 180, 200]);
+            solid.add_box(offset.truncate(), glam::DVec2::X, glam::DVec2::Y, -1.0, 1.0, -1.0, 1.0, 0.0, 4.0);
+            geometry.solids.push(solid);
+            let tessellation = crate::Tessellation::new(&geometry);
+            let mesh = SceneMesh::build_plain(&tessellation, &Default::default());
+            let camera =
+                CameraState { target: offset + DVec3::new(0.0, 0.0, 2.0), distance: 20.0, ..Default::default() };
+            let mut renderer = Renderer3D::new(&device);
+            renderer.upload(&device, &mesh);
+            renderer.set_light(Some(Light { direction: Vec3::new(-1.0, -1.0, 1.2), shadows: true, ground: Some(0.0) }));
+            renderer.render_to_rgba(&device, &queue, SIZE, &camera).unwrap()
+        };
+        let local = make(DVec3::ZERO);
+        let survey = make(DVec3::new(417_626.0, 78_712.0, 0.0));
+        let changed = local.iter().zip(&survey).filter(|(a, b)| a.abs_diff(**b) > 2).count();
+        assert!(changed < local.len() / 1000, "{changed} color channels changed after translation");
     }
 
     /// A round column seen from the side in hidden line: the edges between

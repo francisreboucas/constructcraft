@@ -18,11 +18,17 @@ pub fn view_proj(cam: &CameraState, aspect: f32) -> Mat4 {
 
 /// World-space ray through normalized device coordinates (`x`, `y` in -1..1, y up).
 pub fn pick_ray(cam: &CameraState, aspect: f32, ndc_x: f32, ndc_y: f32) -> Ray {
-    let inv = view_proj(cam, aspect).inverse();
-    let near = inv.project_point3(Vec3::new(ndc_x, ndc_y, 0.0));
-    let far = inv.project_point3(Vec3::new(ndc_x, ndc_y, 1.0));
-    let origin: DVec3 = near.as_dvec3();
-    Ray { origin, dir: (far.as_dvec3() - origin).normalize() }
+    // Inverting a single-precision world matrix loses precision for models
+    // placed far from the origin, especially at the far clipping plane.
+    let forward = cam.forward();
+    let right = forward.cross(DVec3::Z).normalize_or_zero();
+    let up = right.cross(forward);
+    let half_height = (f64::from(FOV_Y).to_radians() * 0.5).tan();
+    let direction = forward
+        + right * (f64::from(ndc_x) * f64::from(aspect.max(1e-3)) * half_height)
+        + up * (f64::from(ndc_y) * half_height);
+    let near = (cam.distance * 0.01).clamp(0.01, 1.0);
+    Ray { origin: cam.eye() + direction * near, dir: direction.normalize_or_zero() }
 }
 
 #[cfg(test)]
@@ -35,5 +41,18 @@ mod tests {
         let ray = pick_ray(&cam, 1.5, 0.0, 0.0);
         let to_target = (cam.target - ray.origin).normalize();
         assert!(ray.dir.dot(to_target) > 0.9999);
+    }
+
+    /// Large georeferenced coordinates must not change a pointer ray's direction.
+    #[test]
+    fn pointer_rays_are_stable_at_survey_coordinates() {
+        let camera = CameraState::default();
+        let shifted = CameraState { target: camera.target + DVec3::new(417_000.0, 78_000.0, 0.0), ..camera };
+        for (x, y) in [(0.0, 0.0), (0.7, -0.5), (-0.8, 0.8)] {
+            let local = pick_ray(&camera, 1.5, x, y);
+            let survey = pick_ray(&shifted, 1.5, x, y);
+            assert!(local.dir.distance(survey.dir) < 1e-12);
+            assert!((survey.origin - local.origin - (shifted.target - camera.target)).length() < 1e-8);
+        }
     }
 }

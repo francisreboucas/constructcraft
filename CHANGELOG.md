@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- 3D views of models in survey coordinates (#462). A model placed hundreds of kilometers from the project origin, as a georeferenced IFC file often is, no longer shakes, loses thin faces or shows blocky surface patterns in 3D views, and picking, window selection, the 3D tools, the selection highlight and the sun's shadows stay aligned with it.
+
 ## [0.14.0] - 2026-11-22
 
 ### Added
