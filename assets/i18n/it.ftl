@@ -2773,6 +2773,7 @@ tb-field-issue-date = Data di emissione
 category-detail-line = Linea di dettaglio
 tpl-type-detail-line = Linea di dettaglio
 tx-create-detail-lines = Crea linee di dettaglio
+tx-detail-line-fillet = Raccordo di linee di dettaglio
 line-style-thin = Sottile
 line-style-medium = Media
 line-style-wide = Spessa
@@ -2791,6 +2792,8 @@ detail-mode-circle = Cerchio
 detail-mode-ellipse = Ellisse
 detail-mode-spline = Spline
 hint-detail-line = Scegli la forma nel gruppo Disegna e fai clic sui suoi punti; Esc termina una spline o scarta la curva
+hint-detail-fillet = Fai clic sulla prima linea di dettaglio diritta
+hint-detail-fillet-second = Fai clic sulla seconda linea di dettaglio (Esc: scegli un'altra prima)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Crea stile di linea
@@ -4223,8 +4226,10 @@ ribbon-place-tool = Posiziona { $tool }
 wall-tool-fillet = Arco di raccordo
 wall-tool-pick-lines = Seleziona linee
 cmd-desc-wall-tool-fillet = Arrotonda l’angolo tra due muri dritti con un muro ad arco del raggio della barra delle opzioni.
+cmd-desc-detail-tool-fillet = Arrotonda l'angolo tra due linee di dettaglio diritte con un arco del raggio della barra delle opzioni.
 cmd-desc-wall-tool-pick-lines = Crea muri lungo le linee di dettaglio e le griglie cliccate (con Concatena, lungo le linee unite).
 why-wall-tool = Scegli prima lo strumento Muro
+why-detail-line-tool = Scegli prima lo strumento Linea di dettaglio
 opt-offset = Offset
 opt-radius = Raggio
 opt-wall-join = Unisci

@@ -2773,6 +2773,7 @@ tb-field-issue-date = Fecha de emisión
 category-detail-line = Línea de detalle
 tpl-type-detail-line = Línea de detalle
 tx-create-detail-lines = Crear líneas de detalle
+tx-detail-line-fillet = Empalme de líneas de detalle
 line-style-thin = Fina
 line-style-medium = Media
 line-style-wide = Gruesa
@@ -2791,6 +2792,8 @@ detail-mode-circle = Círculo
 detail-mode-ellipse = Elipse
 detail-mode-spline = Spline
 hint-detail-line = Elija la forma en el grupo Dibujar y haga clic en sus puntos; Esc termina una spline o descarta la curva
+hint-detail-fillet = Haga clic en la primera línea de detalle recta
+hint-detail-fillet-second = Haga clic en la segunda línea de detalle (Esc: elegir otra primera)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Crear estilo de línea
@@ -4223,8 +4226,10 @@ ribbon-place-tool = Colocar { $tool }
 wall-tool-fillet = Arco de empalme
 wall-tool-pick-lines = Designar líneas
 cmd-desc-wall-tool-fillet = Redondea la esquina entre dos muros rectos con un muro en arco del radio de la barra de opciones.
+cmd-desc-detail-tool-fillet = Redondea la esquina entre dos líneas de detalle rectas con un arco del radio de la barra de opciones.
 cmd-desc-wall-tool-pick-lines = Crea muros a lo largo de las líneas de detalle y rejillas designadas (con Encadenar, a lo largo de las líneas unidas).
 why-wall-tool = Elija primero la herramienta Muro
+why-detail-line-tool = Elija primero la herramienta Línea de detalle
 opt-offset = Desfase
 opt-radius = Radio
 opt-wall-join = Unir

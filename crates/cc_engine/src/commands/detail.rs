@@ -6,11 +6,12 @@
 use super::sketch::CurveArg;
 use super::{add_element, edit, ids_json};
 use crate::error::{EngineError, Result};
-use crate::refs::{self, Ref};
+use crate::refs::{self, Point, Ref, finite, point, positive};
 use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::detail::{DetailLine, DetailStyle, LineStyleRef};
+use cc_core::sketch::SketchCurve;
 use cc_core::{Category, ElementKind, ElementType, ElementTypeId, TypeData};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -71,8 +72,11 @@ fn detail_view(p: &cc_core::Project, r: &Ref) -> Result<(cc_core::ViewId, cc_cor
 /// view's drawing coordinates (meters, as for dimensions and text notes),
 /// shown only in that view, on top of the model. Each curve becomes one
 /// element (a polyline is its segments; rectangles and polygons their
-/// sides), all in one undo step. Detail lines are left out of 3D views and
-/// IFC export; DXF export puts them on a layer named after their style.
+/// sides), all in one undo step. A `radius` rounds the corners between
+/// joined straight lines and an `offset` moves each chain sideways, as for
+/// `walls_create` (ellipses then become splines). Detail lines are left out
+/// of 3D views and IFC export; DXF export puts them on a layer named after
+/// their style.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DetailLineCreate {
@@ -86,6 +90,15 @@ pub struct DetailLineCreate {
     /// (`line_styles_list`).
     #[serde(default)]
     pub style: Option<String>,
+    /// How far the lines lie from the curves given, meters: to the left of
+    /// an open chain, outside a closed one, negative the other way
+    /// (default 0).
+    #[serde(default)]
+    pub offset: Option<f64>,
+    /// Radius in meters of the arcs that round the corners between joined
+    /// straight lines (default 0: sharp corners).
+    #[serde(default)]
+    pub radius: Option<f64>,
 }
 
 impl Command for DetailLineCreate {
@@ -94,18 +107,31 @@ impl Command for DetailLineCreate {
     fn run(self, s: &mut Session) -> Result<Value> {
         let (view, level) = detail_view(s.project(), &self.view)?;
         let style = self.style.as_deref().map(|c| style_arg(s.project(), c)).transpose()?.unwrap_or_default();
-        let mut lines = Vec::new();
+        let offset = finite(self.offset.unwrap_or(0.0), "offset")?;
+        let radius = finite(self.radius.unwrap_or(0.0), "radius")?;
+        if radius < 0.0 {
+            return Err(EngineError::invalid("the radius cannot be negative"));
+        }
+        let mut curves = Vec::new();
         for arg in &self.curves {
-            for curve in arg.curves()? {
-                let line = DetailLine { view, curve, style };
-                if !line.is_valid() {
-                    return Err(EngineError::invalid("a curve is out of bounds"));
-                }
-                lines.push(line);
-            }
-            if lines.len() > MAX_CURVES {
+            curves.extend(arg.curves()?);
+            if curves.len() > MAX_CURVES {
                 return Err(EngineError::invalid(format!("at most {MAX_CURVES} curves at once")));
             }
+        }
+        if offset != 0.0 || radius > 0.0 {
+            curves = super::wall_draw::location_curves(&curves, offset, radius)?;
+        }
+        if curves.len() > MAX_CURVES {
+            return Err(EngineError::invalid(format!("at most {MAX_CURVES} curves at once")));
+        }
+        let mut lines = Vec::with_capacity(curves.len());
+        for curve in curves {
+            let line = DetailLine { view, curve, style };
+            if !line.is_valid() {
+                return Err(EngineError::invalid("a curve is out of bounds"));
+            }
+            lines.push(line);
         }
         if lines.is_empty() {
             return Err(EngineError::invalid("give at least one curve"));
@@ -118,6 +144,94 @@ impl Command for DetailLineCreate {
                 .collect::<Vec<_>>())
         })?;
         Ok(json!({ "created": ids_json(&ids) }))
+    }
+}
+
+/// Round the corner between two straight detail lines of one view with an
+/// arc of `radius`: both are trimmed or extended to meet (keeping the part
+/// each pick point is on, as `trim_corner` does), then cut back to where an
+/// arc of `radius` tangent to both leaves them, and the arc, a detail line
+/// in the style of the first, fills the gap. One undo step; returns the arc.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DetailLineFillet {
+    /// First detail line id.
+    pub a: u64,
+    /// A point on the part of `a` to keep.
+    pub pick_a: Point,
+    /// Second detail line id.
+    pub b: u64,
+    /// A point on the part of `b` to keep.
+    pub pick_b: Point,
+    /// Radius of the arc, meters.
+    pub radius: f64,
+}
+
+impl Command for DetailLineFillet {
+    const NAME: &'static str = "detail_line_fillet";
+    const KIND: CommandKind = CommandKind::Edit;
+    fn run(self, s: &mut Session) -> Result<Value> {
+        let p = s.project();
+        let (a, b) = (refs::element(p, self.a)?, refs::element(p, self.b)?);
+        if a == b {
+            return Err(EngineError::invalid("pick two different detail lines"));
+        }
+        super::modify::not_pinned(p, a)?;
+        super::modify::not_pinned(p, b)?;
+        let radius = positive(self.radius, "radius")?;
+        let line = |id| match p.element(id).map(|e| &e.kind) {
+            Some(ElementKind::DetailLine(l)) if matches!(l.curve, SketchCurve::Line { .. }) => Some(l.view),
+            _ => None,
+        };
+        let (Some(va), Some(vb)) = (line(a), line(b)) else {
+            return Err(EngineError::invalid("a fillet joins two straight detail lines"));
+        };
+        if va != vb {
+            return Err(EngineError::invalid("the detail lines are in different views"));
+        }
+        let (pa, pb) = (point(self.pick_a)?, point(self.pick_b)?);
+        let arc = edit(s, t!("tx-detail-line-fillet"), |e| {
+            e.trim_corner(a, pa, b, pb)?;
+            let detail = |e: &cc_core::EditCtx, id| match e.project().element(id).map(|el| &el.kind) {
+                Some(ElementKind::DetailLine(l)) => Some(l.clone()),
+                _ => None,
+            };
+            let ends = |l: &DetailLine| match l.curve {
+                SketchCurve::Line { a, b } => Some((a, b)),
+                _ => None,
+            };
+            let (Some(la), Some(lb)) = (detail(e, a), detail(e, b)) else {
+                return Err(EngineError::not_found("detail line"));
+            };
+            let (Some(sa), Some(sb)) = (ends(&la), ends(&lb)) else {
+                return Err(EngineError::invalid("a fillet joins two straight detail lines"));
+            };
+            let corner = super::wall_draw::round_corner(sa, sb, radius, "lines")?;
+            let set = |e: &mut cc_core::EditCtx, id, start: bool, to| {
+                if let Some(ElementKind::DetailLine(l)) = e.element_mut(id).map(|el| &mut el.kind)
+                    && let SketchCurve::Line { a, b } = &mut l.curve
+                {
+                    if start { *a = to } else { *b = to }
+                }
+            };
+            set(e, a, corner.a_start, corner.ta);
+            set(e, b, corner.b_start, corner.tb);
+            let (level, type_id) = e
+                .project()
+                .element(a)
+                .map(|el| (el.level, el.type_id))
+                .ok_or_else(|| EngineError::not_found("detail line"))?;
+            let arc = DetailLine {
+                view: la.view,
+                curve: SketchCurve::Arc { a: corner.ta, b: corner.tb, bulge: corner.bulge },
+                style: la.style,
+            };
+            if !arc.is_valid() {
+                return Err(EngineError::invalid("the arc is out of bounds"));
+            }
+            Ok(add_element(e, level, type_id, ElementKind::DetailLine(arc)))
+        })?;
+        Ok(json!({ "created": arc.0, "changed": [a.0, b.0] }))
     }
 }
 

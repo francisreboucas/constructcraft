@@ -2773,6 +2773,7 @@ tb-field-issue-date = 発行日
 category-detail-line = 詳細線
 tpl-type-detail-line = 詳細線
 tx-create-detail-lines = 詳細線を作成
+tx-detail-line-fillet = 詳細線のフィレット
 line-style-thin = 細線
 line-style-medium = 中線
 line-style-wide = 太線
@@ -2791,6 +2792,8 @@ detail-mode-circle = 円
 detail-mode-ellipse = 楕円
 detail-mode-spline = スプライン
 hint-detail-line = 「描画」グループで形状を選び、その点をクリック。Esc でスプラインを終了、または曲線を破棄
+hint-detail-fillet = 1 本目の直線の詳細線をクリック
+hint-detail-fillet-second = 2 本目の詳細線をクリック（Esc: 1 本目を選び直す）
 
 # Line styles, filled and masking regions
 tx-line-style-create = 線種を作成
@@ -4223,8 +4226,10 @@ ribbon-place-tool = { $tool } を配置
 wall-tool-fillet = フィレット円弧
 wall-tool-pick-lines = 線を選択
 cmd-desc-wall-tool-fillet = 2 つの直線壁の角を、オプション バーの半径の円弧壁で丸めます。
+cmd-desc-detail-tool-fillet = 2 本の直線の詳細線の角を、オプションバーの半径の円弧で丸めます。
 cmd-desc-wall-tool-pick-lines = クリックした詳細線と通芯に沿って壁を作成します（チェーンでは接続された線に沿って）。
 why-wall-tool = 先に壁ツールを選択してください
+why-detail-line-tool = 先に詳細線ツールを選択してください
 opt-offset = オフセット
 opt-radius = 半径
 opt-wall-join = 結合

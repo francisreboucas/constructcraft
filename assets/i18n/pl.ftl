@@ -2773,6 +2773,7 @@ tb-field-issue-date = Data wydania
 category-detail-line = Linia szczegółu
 tpl-type-detail-line = Linia szczegółu
 tx-create-detail-lines = Utwórz linie szczegółu
+tx-detail-line-fillet = Zaokrąglenie linii detalu
 line-style-thin = Cienka
 line-style-medium = Średnia
 line-style-wide = Gruba
@@ -2791,6 +2792,8 @@ detail-mode-circle = Okrąg
 detail-mode-ellipse = Elipsa
 detail-mode-spline = Splajn
 hint-detail-line = Wybierz kształt w grupie Rysuj i kliknij jego punkty; Esc kończy splajn lub porzuca krzywą
+hint-detail-fillet = Kliknij pierwszą prostą linię detalu
+hint-detail-fillet-second = Kliknij drugą linię detalu (Esc: wybierz inną pierwszą)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Utwórz styl linii
@@ -4223,8 +4226,10 @@ ribbon-place-tool = Umieść { $tool }
 wall-tool-fillet = Łuk zaokrąglenia
 wall-tool-pick-lines = Wskaż linie
 cmd-desc-wall-tool-fillet = Zaokrągla narożnik dwóch prostych ścian ścianą łukową o promieniu z paska opcji.
+cmd-desc-detail-tool-fillet = Zaokrągla narożnik między dwiema prostymi liniami detalu łukiem o promieniu z paska opcji.
 cmd-desc-wall-tool-pick-lines = Tworzy ściany wzdłuż klikniętych linii szczegółu i osi (z Łańcuchem wzdłuż połączonych linii).
 why-wall-tool = Najpierw wybierz narzędzie Ściana
+why-detail-line-tool = Najpierw wybierz narzędzie Linia detalu
 opt-offset = Odsunięcie
 opt-radius = Promień
 opt-wall-join = Łącz

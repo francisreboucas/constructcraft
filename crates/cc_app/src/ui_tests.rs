@@ -515,8 +515,15 @@ fn detail_line_tool_shapes_are_in_its_modify_tab() {
         harness.run();
         assert_eq!(harness.state().detail.draw, draw, "{label}");
     }
+    // Fillet Arc picks lines instead of drawing; a shape button goes back to drawing.
+    harness.get_by_role_and_label(Role::Button, &t!("wall-tool-fillet")).click();
+    harness.run();
+    assert!(harness.state().detail.fillet);
+    harness.get_by_role_and_label(Role::Button, &t!("sketch-tool-line")).click();
+    harness.run();
+    assert!(!harness.state().detail.fillet);
     // Wall-only modes stay out.
-    assert!(harness.query_by_label(&t!("wall-tool-fillet")).is_none());
+    assert!(harness.query_by_label(&t!("wall-tool-pick-lines")).is_none());
     harness.state_mut().set_tool(Tool::Select);
     assert_eq!(harness.state().ribbon_tab, RibbonTab::Annotate, "back to the tab shown before");
 
@@ -531,11 +538,23 @@ fn detail_line_tool_shapes_are_in_its_modify_tab() {
     bar.state_mut().detail.draw = Draw::Line;
     bar.run();
     assert!(bar.query_by_label(&t!("sketch-chain")).is_some());
+    assert!(bar.query_by_label(&t!("opt-offset")).is_none(), "a chain is made a segment at a time");
+    // A rectangle: offset and corner radius; Fillet Arc: its own radius.
+    bar.state_mut().detail.draw = Draw::Rect;
+    bar.run();
+    assert!(bar.query_by_label(&t!("opt-offset")).is_some());
+    assert!(bar.query_by_label(&t!("opt-radius")).is_some());
+    bar.state_mut().detail.fillet = true;
+    bar.run();
+    assert!(bar.query_by_label(&t!("opt-offset")).is_none());
+    assert!(bar.query_by_label(&t!("hint-detail-fillet")).is_some());
 }
 
 /// The Detail Line tool draws polygons and splines too: a hexagon is six
 /// detail lines, Enter ends a spline as one detail line (wherever the
-/// pointer is), and a tangent arc starts only at a free end.
+/// pointer is), a tangent arc starts only at a free end, a radius rounds a
+/// rectangle's corners and places a circle in one click, and Fillet Arc
+/// rounds the corner of two lines.
 #[test]
 fn detail_line_tool_draws_polygons_and_splines() {
     use crate::sketch_mode::Draw;
@@ -616,6 +635,32 @@ fn detail_line_tool_draws_polygons_and_splines() {
     let made = lines(&harness);
     assert_eq!(made.len(), 10, "{}", harness.state().message);
     assert!(made.iter().any(|c| matches!(c, SketchCurve::Arc { .. })));
+
+    // A rectangle with a corner radius: four sides and four arcs.
+    harness.state_mut().detail.draw = Draw::Rect;
+    harness.state_mut().detail.radius = 0.5;
+    harness.run();
+    click(&mut harness, egui::pos2(350.0, 250.0));
+    click(&mut harness, egui::pos2(450.0, 320.0));
+    assert_eq!(lines(&harness).len(), 18, "{}", harness.state().message);
+    // With a radius, a circle takes one click.
+    harness.state_mut().detail.draw = Draw::Circle;
+    harness.run();
+    click(&mut harness, egui::pos2(520.0, 60.0));
+    let made = lines(&harness);
+    assert_eq!(made.len(), 19, "{}", harness.state().message);
+    assert!(made.iter().any(|c| matches!(c, SketchCurve::Circle { radius, .. } if (radius - 0.5).abs() < 1e-9)));
+
+    // Fillet Arc rounds the corner B of the two lines drawn before.
+    harness.state_mut().detail.fillet = true;
+    harness.state_mut().detail.fillet_radius = 1.0;
+    harness.run();
+    click(&mut harness, egui::pos2(150.0, 300.0));
+    click(&mut harness, egui::pos2(200.0, 270.0));
+    let made = lines(&harness);
+    assert_eq!(made.len(), 20, "{}", harness.state().message);
+    let arcs = made.iter().filter(|c| matches!(c, SketchCurve::Arc { .. })).count();
+    assert_eq!(arcs, 6, "the tangent arc, four corners and the fillet");
 }
 
 /// The options bar of a shape mode shows its offset, radius and sides.

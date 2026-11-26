@@ -2775,6 +2775,7 @@ tb-field-issue-date = ວັນທີອອກ
 category-detail-line = ເສັ້ນລາຍລະອຽດ
 tpl-type-detail-line = ເສັ້ນລາຍລະອຽດ
 tx-create-detail-lines = ສ້າງເສັ້ນລາຍລະອຽດ
+tx-detail-line-fillet = ມົນມຸມເສັ້ນລາຍລະອຽດ
 line-style-thin = ບາງ
 line-style-medium = ກາງ
 line-style-wide = ໜາ
@@ -2793,6 +2794,8 @@ detail-mode-circle = ວົງມົນ
 detail-mode-ellipse = ວົງຣີ
 detail-mode-spline = ເສັ້ນໂຄ້ງ Spline
 hint-detail-line = ເລືອກຮູບຮ່າງໃນກຸ່ມ ແຕ້ມ ແລ້ວຄລິກຈຸດຂອງມັນ; Esc ສິ້ນສຸດ spline ຫຼື ຍົກເລີກເສັ້ນ
+hint-detail-fillet = ຄລິກເສັ້ນລາຍລະອຽດຊື່ເສັ້ນທຳອິດ
+hint-detail-fillet-second = ຄລິກເສັ້ນລາຍລະອຽດເສັ້ນທີສອງ (Esc: ເລືອກເສັ້ນທຳອິດໃໝ່)
 
 # Line styles, filled and masking regions
 tx-line-style-create = ສ້າງຮູບແບບເສັ້ນ
@@ -4225,8 +4228,10 @@ ribbon-place-tool = ວາງ { $tool }
 wall-tool-fillet = ເສັ້ນໂຄ້ງມົນມຸມ
 wall-tool-pick-lines = ເລືອກເສັ້ນ
 cmd-desc-wall-tool-fillet = ມົນມຸມລະຫວ່າງຝາຊື່ສອງຝາດ້ວຍຝາໂຄ້ງຕາມລັດສະໝີໃນແຖບຕົວເລືອກ.
+cmd-desc-detail-tool-fillet = ມົນມຸມລະຫວ່າງສອງເສັ້ນລາຍລະອຽດຊື່ ດ້ວຍເສັ້ນໂຄ້ງຕາມລັດສະໝີໃນແຖບຕົວເລືອກ.
 cmd-desc-wall-tool-pick-lines = ສ້າງຝາຕາມເສັ້ນລາຍລະອຽດ ແລະ ເສັ້ນກິດທີ່ຄລິກ (ດ້ວຍຕໍ່ເນື່ອງ, ຕາມເສັ້ນທີ່ຕໍ່ກັນ).
 why-wall-tool = ເລືອກເຄື່ອງມືຝາກ່ອນ
+why-detail-line-tool = ເລືອກເຄື່ອງມືເສັ້ນລາຍລະອຽດກ່ອນ
 opt-offset = ໄລຍະເລື່ອນ
 opt-radius = ລັດສະໝີ
 opt-wall-join = ຕໍ່

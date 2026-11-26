@@ -2773,6 +2773,7 @@ tb-field-issue-date = 发布日期
 category-detail-line = 详图线
 tpl-type-detail-line = 详图线
 tx-create-detail-lines = 创建详图线
+tx-detail-line-fillet = 详图线圆角
 line-style-thin = 细
 line-style-medium = 中
 line-style-wide = 粗
@@ -2791,6 +2792,8 @@ detail-mode-circle = 圆
 detail-mode-ellipse = 椭圆
 detail-mode-spline = 样条曲线
 hint-detail-line = 在“绘制”组中选择形状并单击其点；Esc 结束样条曲线或放弃曲线
+hint-detail-fillet = 单击第一条直详图线
+hint-detail-fillet-second = 单击第二条详图线（Esc：重新选择第一条）
 
 # Line styles, filled and masking regions
 tx-line-style-create = 创建线样式
@@ -4223,8 +4226,10 @@ ribbon-place-tool = 放置 { $tool }
 wall-tool-fillet = 圆角弧
 wall-tool-pick-lines = 拾取线
 cmd-desc-wall-tool-fillet = 以选项栏中半径的弧形墙将两道直墙的转角倒圆。
+cmd-desc-detail-tool-fillet = 用选项栏半径的圆弧将两条直详图线之间的角倒圆。
 cmd-desc-wall-tool-pick-lines = 沿点选的详图线与轴网创建墙（勾选链接时沿相连的线）。
 why-wall-tool = 请先选择“墙”工具
+why-detail-line-tool = 请先选择详图线工具
 opt-offset = 偏移
 opt-radius = 半径
 opt-wall-join = 连接

@@ -2773,6 +2773,7 @@ tb-field-issue-date = Ausgabedatum
 category-detail-line = Detaillinie
 tpl-type-detail-line = Detaillinie
 tx-create-detail-lines = Detaillinien erstellen
+tx-detail-line-fillet = Detaillinien ausrunden
 line-style-thin = Dünn
 line-style-medium = Mittel
 line-style-wide = Breit
@@ -2791,6 +2792,8 @@ detail-mode-circle = Kreis
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
 hint-detail-line = Wählen Sie die Form in der Gruppe Zeichnen und klicken Sie ihre Punkte; Esc beendet einen Spline oder verwirft die Kurve
+hint-detail-fillet = Klicken Sie die erste gerade Detaillinie
+hint-detail-fillet-second = Klicken Sie die zweite Detaillinie (Esc: eine andere erste wählen)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Linienstil erstellen
@@ -4223,8 +4226,10 @@ ribbon-place-tool = { $tool } platzieren
 wall-tool-fillet = Ausrundungsbogen
 wall-tool-pick-lines = Linien wählen
 cmd-desc-wall-tool-fillet = Rundet die Ecke zwischen zwei geraden Wänden mit einer Bogenwand des Radius der Optionsleiste aus.
+cmd-desc-detail-tool-fillet = Rundet die Ecke zwischen zwei geraden Detaillinien mit einem Bogen des Radius aus der Optionsleiste ab.
 cmd-desc-wall-tool-pick-lines = Erstellt Wände entlang der angeklickten Detaillinien und Raster (mit Verketten entlang der verbundenen Linien).
 why-wall-tool = Wählen Sie zuerst das Werkzeug Wand
+why-detail-line-tool = Wählen Sie zuerst das Werkzeug Detaillinie
 opt-offset = Versatz
 opt-radius = Radius
 opt-wall-join = Verbinden

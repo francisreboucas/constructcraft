@@ -2773,6 +2773,7 @@ tb-field-issue-date = Date d'émission
 category-detail-line = Ligne de détail
 tpl-type-detail-line = Ligne de détail
 tx-create-detail-lines = Créer des lignes de détail
+tx-detail-line-fillet = Raccord de lignes de détail
 line-style-thin = Fine
 line-style-medium = Moyenne
 line-style-wide = Épaisse
@@ -2791,6 +2792,8 @@ detail-mode-circle = Cercle
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
 hint-detail-line = Choisissez la forme dans le groupe Dessiner et cliquez ses points ; Échap termine une spline ou abandonne la courbe
+hint-detail-fillet = Cliquez la première ligne de détail droite
+hint-detail-fillet-second = Cliquez la seconde ligne de détail (Échap : choisir une autre première)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Créer un style de ligne
@@ -4223,8 +4226,10 @@ ribbon-place-tool = Placer { $tool }
 wall-tool-fillet = Arc de raccord
 wall-tool-pick-lines = Choisir des lignes
 cmd-desc-wall-tool-fillet = Arrondit l’angle entre deux murs droits par un mur en arc du rayon de la barre d’options.
+cmd-desc-detail-tool-fillet = Arrondit le coin entre deux lignes de détail droites par un arc du rayon de la barre d'options.
 cmd-desc-wall-tool-pick-lines = Crée des murs le long des lignes de détail et des quadrillages cliqués (avec Chaîner, le long des lignes jointes).
 why-wall-tool = Choisissez d’abord l’outil Mur
+why-detail-line-tool = Choisissez d'abord l'outil Ligne de détail
 opt-offset = Décalage
 opt-radius = Rayon
 opt-wall-join = Joindre

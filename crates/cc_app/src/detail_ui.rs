@@ -47,23 +47,49 @@ pub const DRAWS: [Draw; 10] = [
     Draw::Spline,
 ];
 
+/// The shapes whose lines the options bar's *Offset* moves: those drawn
+/// whole (a chain of lines or tangent arcs is made a segment at a time).
+const OFFSET_DRAWS: [Draw; 6] =
+    [Draw::Rect, Draw::Polygon, Draw::PolygonOut, Draw::Circle, Draw::Arc3, Draw::ArcCenter];
+
 /// Options of the Detail Line tool (kept between uses): the shape and line
-/// style from its ribbon tab, chaining and polygon sides from the options bar.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// style from its ribbon tab, the rest from the options bar.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DetailOptions {
     /// One of [`DRAWS`].
     pub draw: Draw,
+    /// *Fillet Arc* instead of `draw`: two straight detail lines picked get
+    /// their corner rounded.
+    pub fillet: bool,
     /// Lines and tangent arcs go on from the last end, until the chain closes or Esc.
     pub chain: bool,
     /// Sides of the next polygon.
     pub sides: usize,
+    /// How far the lines lie from the shape drawn (see [`OFFSET_DRAWS`]):
+    /// outside a closed one, to the left of an arc, negative the other way;
+    /// meters.
+    pub offset: f64,
+    /// The radius that rounds the corners of rectangles and polygons (0:
+    /// sharp); with it a circle takes one click. Meters.
+    pub radius: f64,
+    /// The radius of *Fillet Arc*, meters.
+    pub fillet_radius: f64,
     /// A built-in style or one of the project's.
     pub style: LineStyleRef,
 }
 
 impl Default for DetailOptions {
     fn default() -> Self {
-        Self { draw: Draw::Line, chain: true, sides: 6, style: LineStyleRef::default() }
+        Self {
+            draw: Draw::Line,
+            fillet: false,
+            chain: true,
+            sides: 6,
+            offset: 0.0,
+            radius: 0.0,
+            fillet_radius: 1.0,
+            style: LineStyleRef::default(),
+        }
     }
 }
 
@@ -72,47 +98,70 @@ impl Default for DetailOptions {
 pub struct DetailDraw {
     view: ViewId,
     session: Session,
-    /// The open curves of the view's detail lines (where a tangent arc may
-    /// start), read once per document revision.
-    lines: Option<(u64, Vec<SketchCurve>)>,
+    /// The view's lines and arcs as detail lines (where a tangent arc may
+    /// start, what *Fillet Arc* picks), read once per document revision.
+    lines: Option<(u64, Vec<(ElementId, SketchCurve)>)>,
+    /// *Fillet Arc*'s first line and where it was clicked.
+    fillet_first: Option<(ElementId, DVec2)>,
 }
 
 impl DetailDraw {
     fn new(view: ViewId) -> Self {
-        Self { view, session: Session::new(Target::Detail, Vec::new()), lines: None }
+        Self { view, session: Session::new(Target::Detail, Vec::new()), lines: None, fillet_first: None }
     }
 
     /// The curves a tangent arc started at `p` must see: the view's detail
     /// lines with an end within `r` of `p`, and those joined to such an end
     /// (so a joined end is not taken for a free one).
     fn tangent_starts(&mut self, state: &AppState, p: DVec2, r: f64) -> Vec<SketchCurve> {
-        let revision = state.session.doc.revision();
-        if self.lines.as_ref().is_none_or(|(rev, _)| *rev != revision) {
-            let view = self.view;
-            let lines = state
-                .project()
-                .elements
-                .values()
-                .filter_map(|e| match &e.kind {
-                    ElementKind::DetailLine(l) if l.view == view && l.curve.ends().is_some() => Some(l.curve.clone()),
-                    _ => None,
-                })
-                .take(MAX_VIEW_LINES)
-                .collect();
-            self.lines = Some((revision, lines));
-        }
-        let Some((_, lines)) = self.lines.as_ref() else { return Vec::new() };
+        let lines = self.view_lines(state);
         let ends = |c: &SketchCurve| c.ends().map(|(a, b)| [a, b]).unwrap_or([DVec2::NAN; 2]);
-        let near: Vec<DVec2> = lines.iter().flat_map(ends).filter(|q| q.distance(p) <= r).take(MAX_KEPT).collect();
+        let near: Vec<DVec2> =
+            lines.iter().flat_map(|(_, c)| ends(c)).filter(|q| q.distance(p) <= r).take(MAX_KEPT).collect();
         if near.is_empty() {
             return Vec::new();
         }
         lines
             .iter()
-            .filter(|c| ends(c).iter().any(|q| near.iter().any(|n| n.distance(*q) <= JOIN_TOL)))
+            .filter(|(_, c)| ends(c).iter().any(|q| near.iter().any(|n| n.distance(*q) <= JOIN_TOL)))
             .take(MAX_KEPT)
-            .cloned()
+            .map(|(_, c)| c.clone())
             .collect()
+    }
+
+    /// The straight detail line of the view within `r` of `p`, the nearest.
+    fn straight_line_at(&mut self, state: &AppState, p: DVec2, r: f64) -> Option<ElementId> {
+        self.view_lines(state)
+            .iter()
+            .filter(|(_, c)| matches!(c, SketchCurve::Line { .. }))
+            .filter_map(|(id, c)| Some((*id, nearest_on(c, p)?.distance(p))))
+            .filter(|(_, d)| *d <= r)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(id, _)| id)
+    }
+
+    /// The view's detail lines with ends, read again when the document changed.
+    fn view_lines(&mut self, state: &AppState) -> &[(ElementId, SketchCurve)] {
+        let revision = state.session.doc.revision();
+        let view = self.view;
+        let read = || {
+            state
+                .project()
+                .elements
+                .values()
+                .filter_map(|e| match &e.kind {
+                    ElementKind::DetailLine(l) if l.view == view && l.curve.ends().is_some() => {
+                        Some((e.id, l.curve.clone()))
+                    }
+                    _ => None,
+                })
+                .take(MAX_VIEW_LINES)
+                .collect()
+        };
+        if self.lines.as_ref().is_none_or(|(rev, _)| *rev != revision) {
+            self.lines = Some((revision, read()));
+        }
+        self.lines.as_ref().map_or(&[], |(_, lines)| lines.as_slice())
     }
 }
 
@@ -124,6 +173,13 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         _ => DetailDraw::new(view.id),
     };
     let opts = state.detail;
+    if opts.fillet {
+        d.session.picks.clear();
+        fillet(resp, painter, state, &mut d, xf);
+        state.detail_draw = Some(d);
+        return;
+    }
+    d.fillet_first = None;
     let draw = if DRAWS.contains(&opts.draw) { opts.draw } else { Draw::Line };
     let s = &mut d.session;
     if s.draw != draw {
@@ -164,7 +220,16 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         let click = resp.clicked() || enter;
         let had_typed = !s.typed.is_empty();
         let p = s.typed_point(sn.point);
-        sketch_mode::draw(click, painter, s, p, xf, PICK_PX / xf.scale);
+        if draw == Draw::Circle && opts.radius > 0.0 && s.picks.is_empty() {
+            // With a radius, one click places the circle.
+            let circle = SketchCurve::Circle { center: p, radius: opts.radius };
+            paint_curve(painter, xf, &circle, Stroke::new(1.2, PREVIEW));
+            if click {
+                new.push(circle);
+            }
+        } else {
+            sketch_mode::draw(click, painter, s, p, xf, PICK_PX / xf.scale);
+        }
         if click && had_typed {
             s.typed.clear();
         }
@@ -175,9 +240,49 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         }
     }
     if !new.is_empty() {
-        create(state, view.id, opts.style, &new);
+        let offset = if OFFSET_DRAWS.contains(&draw) { opts.offset } else { 0.0 };
+        let corners = matches!(draw, Draw::Rect | Draw::Polygon | Draw::PolygonOut);
+        create_shaped(state, view.id, opts.style, &new, offset, if corners { opts.radius } else { 0.0 });
     }
     state.detail_draw = Some(d);
+}
+
+/// *Fillet Arc*: the first click picks a straight detail line, the second
+/// another, and an arc of the options' radius rounds their corner.
+fn fillet(resp: &Response, painter: &Painter, state: &mut AppState, d: &mut DetailDraw, xf: &Xf) {
+    let lit = |painter: &Painter, state: &AppState, id: ElementId| {
+        if let Some(c) = curve_of(state, id) {
+            paint_curve(painter, xf, &c, Stroke::new(2.5, HIGHLIGHT));
+        }
+    };
+    if let Some((first, _)) = d.fillet_first {
+        lit(painter, state, first);
+    }
+    let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) else { return };
+    let hovered = d.straight_line_at(state, raw, PICK_PX / xf.scale.max(1e-9));
+    if let Some(id) = hovered {
+        lit(painter, state, id);
+    }
+    if !resp.clicked() {
+        return;
+    }
+    let Some(id) = hovered else { return };
+    match d.fillet_first {
+        Some((a, pick_a)) if a != id => {
+            let command = cc_engine::commands::detail::DetailLineFillet {
+                a: a.0,
+                pick_a: pick_a.to_array(),
+                b: id.0,
+                pick_b: raw.to_array(),
+                radius: state.detail.fillet_radius,
+            };
+            if let Some(out) = crate::actions::run_command(state, command) {
+                state.selection = out["created"].as_u64().map(ElementId).into_iter().collect();
+            }
+            d.fillet_first = None;
+        }
+        _ => d.fillet_first = Some((id, raw)),
+    }
 }
 
 /// End the spline being drawn where it is; returns the curve it made.
@@ -189,12 +294,27 @@ fn finish_spline(s: &mut Session) -> Vec<SketchCurve> {
 
 /// Make `curves` detail lines of `view` (one undo step); they are selected.
 pub(crate) fn create(state: &mut AppState, view: ViewId, style: LineStyleRef, curves: &[SketchCurve]) {
+    create_shaped(state, view, style, curves, 0.0, 0.0);
+}
+
+/// [`create`], the curves moved `offset` sideways and their corners rounded
+/// to `radius` (see `detail_line_create`).
+fn create_shaped(
+    state: &mut AppState,
+    view: ViewId,
+    style: LineStyleRef,
+    curves: &[SketchCurve],
+    offset: f64,
+    radius: f64,
+) {
     // A project style that was deleted meanwhile falls back to the default.
     let style = if style.exists(&state.project().line_styles) { style } else { LineStyleRef::default() };
     let command = DetailLineCreate {
         view: Ref::Id(view.0),
         curves: curves.iter().map(CurveArg::of).collect(),
         style: Some(style.code(&state.project().line_styles)),
+        offset: (offset != 0.0).then_some(offset),
+        radius: (radius > 0.0).then_some(radius),
     };
     if let Some(out) = crate::actions::run_command(state, command) {
         let ids = out["created"].as_array().map(|a| a.iter().filter_map(|v| v.as_u64()).map(ElementId).collect());
@@ -230,6 +350,11 @@ pub fn typed_target(state: &mut AppState) -> &mut TypedInput {
 /// Returns whether it did.
 pub fn escape(state: &mut AppState) -> bool {
     match state.detail_draw.as_mut() {
+        // Fillet Arc drops its first line.
+        Some(d) if d.fillet_first.is_some() => {
+            d.fillet_first = None;
+            true
+        }
         Some(d) if !d.session.typed.is_empty() || d.session.typed.angle_active => {
             d.session.typed.clear();
             true
@@ -415,26 +540,52 @@ pub fn offset_pick(
     true
 }
 
-/// The options bar of the Detail Line tool: chaining or polygon sides, and
-/// the hint of the shape being drawn (the shape and the line style are in
-/// its ribbon tab, see [`style_combo`]).
+/// The options bar of the Detail Line tool: offset, radius, chaining or
+/// polygon sides as the shape takes them, and the hint of what to click
+/// next (the shape and the line style are in its ribbon tab, see
+/// [`style_combo`]).
 pub fn options(ui: &mut Ui, state: &mut AppState) {
     let o = &mut state.detail;
+    if o.fillet {
+        ui.label(t!("opt-radius"));
+        ui.add(crate::properties::length_drag(&mut o.fillet_radius).speed(0.01).range(0.001..=100.0));
+        ui.separator();
+        let first = state.detail_draw.as_ref().is_some_and(|d| d.fillet_first.is_some());
+        let hint = if first { t!("hint-detail-fillet-second") } else { t!("hint-detail-fillet") };
+        ui.label(crate::theme::muted(hint));
+        return;
+    }
+    if OFFSET_DRAWS.contains(&o.draw) {
+        ui.label(t!("opt-offset"));
+        ui.add(crate::properties::length_drag(&mut o.offset).speed(0.01).range(-100.0..=100.0));
+        ui.separator();
+    }
     match o.draw {
         Draw::Line | Draw::ArcTangent => {
             ui.checkbox(&mut o.chain, t!("sketch-chain"));
             ui.separator();
         }
+        Draw::Rect | Draw::Circle => {
+            ui.label(t!("opt-radius"));
+            ui.add(crate::properties::length_drag(&mut o.radius).speed(0.01).range(0.0..=100.0));
+            ui.separator();
+        }
         Draw::Polygon | Draw::PolygonOut => {
+            ui.label(t!("opt-radius"));
+            ui.add(crate::properties::length_drag(&mut o.radius).speed(0.01).range(0.0..=100.0));
             ui.label(t!("sketch-sides"));
             ui.add(egui::DragValue::new(&mut o.sides).range(sketch_mode::MIN_SIDES..=sketch_mode::MAX_SIDES));
             ui.separator();
         }
         _ => {}
     }
-    let draw = o.draw;
+    let (draw, radius) = (o.draw, o.radius);
     let picks = state.detail_draw.as_ref().filter(|d| d.session.draw == draw).map_or(0, |d| d.session.picks.len());
-    ui.label(crate::theme::muted(sketch_mode::draw_hint(draw, picks)));
+    let hint = match (draw, picks) {
+        (Draw::Circle, 0) if radius > 0.0 => t!("hint-wall-circle-radius"),
+        _ => sketch_mode::draw_hint(draw, picks),
+    };
+    ui.label(crate::theme::muted(hint));
 }
 
 /// The *Line Style* group of the *Modify | Place Detail Line* tab: the

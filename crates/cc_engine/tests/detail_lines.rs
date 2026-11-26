@@ -204,3 +204,83 @@ fn files_with_bad_detail_lines_are_repaired() {
     assert!(loaded.element(cc_core::ElementId(made[0])).is_some());
     assert!(loaded.element(cc_core::ElementId(made[1])).is_none());
 }
+
+/// The detail lines of `view` as their curves (JSON).
+fn curves_of(s: &mut Session, view: u64) -> Vec<Value> {
+    let list = run(s, "elements_list", json!({"category": "detailline"}));
+    let ids: Vec<u64> = list.as_array().unwrap().iter().filter_map(|e| e["id"].as_u64()).collect();
+    ids.into_iter()
+        .filter_map(|id| {
+            let got = run(s, "element_get", json!({"id": id}));
+            (got["params"]["view"].as_u64() == Some(view)).then(|| got["params"]["curve"].clone())
+        })
+        .collect()
+}
+
+/// `radius` rounds a rectangle's corners and `offset` moves it outward, as
+/// for walls.
+#[test]
+fn detail_lines_take_an_offset_and_a_corner_radius() {
+    let mut s = Session::default();
+    let view = run(&mut s, "view_create", json!({"kind": "drafting"}))["id"].as_u64().unwrap();
+    let rect = json!({"kind": "rectangle", "corner": [0, 0], "opposite": [4, 2]});
+    let made = ids(&run(&mut s, "detail_line_create", json!({"view": view, "curves": [rect], "radius": 0.5})));
+    assert_eq!(made.len(), 8, "four sides and four corner arcs");
+    let arcs = curves_of(&mut s, view).iter().filter(|c| c.get("Arc").is_some()).count();
+    assert_eq!(arcs, 4);
+
+    let other = run(&mut s, "view_create", json!({"kind": "drafting"}))["id"].as_u64().unwrap();
+    run(&mut s, "detail_line_create", json!({"view": other, "curves": [rect], "offset": 1.0}));
+    // Outward: the sides now run from -1 to 5 and from -1 to 3.
+    let mut xs = Vec::new();
+    for c in curves_of(&mut s, other) {
+        for end in ["a", "b"] {
+            xs.push(c["Line"][end][0].as_f64().unwrap());
+        }
+    }
+    let (lo, hi) = xs.iter().fold((f64::MAX, f64::MIN), |(lo, hi), x| (lo.min(*x), hi.max(*x)));
+    assert!((lo + 1.0).abs() < 1e-9 && (hi - 5.0).abs() < 1e-9, "{lo} {hi}");
+
+    assert_eq!(
+        fails(&mut s, "detail_line_create", json!({"view": view, "curves": [rect], "radius": -1})),
+        ErrorCode::InvalidArguments
+    );
+}
+
+/// `detail_line_fillet` rounds the corner of two straight detail lines with
+/// an arc tangent to both, in one undo step.
+#[test]
+fn detail_line_fillet_rounds_a_corner() {
+    let mut s = Session::default();
+    let view = run(&mut s, "view_create", json!({"kind": "drafting"}))["id"].as_u64().unwrap();
+    let lines = json!([
+        {"kind": "line", "start": [0, 0], "end": [3, 0]},
+        {"kind": "line", "start": [3, 0], "end": [3, 3]},
+    ]);
+    let made = ids(&run(&mut s, "detail_line_create", json!({"view": view, "curves": lines, "style": "wide"})));
+    let out = run(
+        &mut s,
+        "detail_line_fillet",
+        json!({"a": made[0], "pick_a": [1, 0], "b": made[1], "pick_b": [3, 1], "radius": 1.0}),
+    );
+    let arc = out["created"].as_u64().unwrap();
+    let at = |v: &Value, x: f64, y: f64| {
+        let (vx, vy) = (v[0].as_f64().unwrap(), v[1].as_f64().unwrap());
+        assert!((vx - x).abs() < 1e-9 && (vy - y).abs() < 1e-9, "{v} is not ({x}, {y})");
+    };
+    at(&curve(&mut s, made[0])["Line"]["b"], 2.0, 0.0);
+    at(&curve(&mut s, made[1])["Line"]["a"], 3.0, 1.0);
+    let got = run(&mut s, "element_get", json!({"id": arc}));
+    assert_eq!(got["params"]["style"], json!({"BuiltIn": "Wide"}), "the first line's style");
+    let a = &got["params"]["curve"]["Arc"];
+    at(&a["a"], 2.0, 0.0);
+    at(&a["b"], 3.0, 1.0);
+    run(&mut s, "undo", json!({}));
+    assert_eq!(curves_of(&mut s, view).len(), 2, "one undo step");
+
+    // Too large a radius, the same line twice, or an arc is refused.
+    let big = json!({"a": made[0], "pick_a": [1, 0], "b": made[1], "pick_b": [3, 1], "radius": 10.0});
+    assert_eq!(fails(&mut s, "detail_line_fillet", big), ErrorCode::InvalidArguments);
+    let same = json!({"a": made[0], "pick_a": [1, 0], "b": made[0], "pick_b": [2, 0], "radius": 1.0});
+    assert_eq!(fails(&mut s, "detail_line_fillet", same), ErrorCode::InvalidArguments);
+}

@@ -405,6 +405,7 @@ registry![
         annotate::DimensionLock,
         annotate::TextCreate,
         detail::DetailLineCreate,
+        detail::DetailLineFillet,
         detail_component::DetailComponentCreate,
         detail_component::DetailComponentPlace,
         browser::BrowserSchemesList,

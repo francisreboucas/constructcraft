@@ -2773,6 +2773,7 @@ tb-field-issue-date = Issue date
 category-detail-line = Detail Line
 tpl-type-detail-line = Detail line
 tx-create-detail-lines = Create Detail Lines
+tx-detail-line-fillet = Fillet Detail Lines
 line-style-thin = Thin
 line-style-medium = Medium
 line-style-wide = Wide
@@ -2791,6 +2792,8 @@ detail-mode-circle = Circle
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
 hint-detail-line = Pick a shape in the Draw group and click its points; Esc ends a spline or drops the curve
+hint-detail-fillet = Click the first straight detail line
+hint-detail-fillet-second = Click the second detail line (Esc: pick another first one)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Create line style
@@ -4223,8 +4226,10 @@ ribbon-place-tool = Place { $tool }
 wall-tool-fillet = Fillet Arc
 wall-tool-pick-lines = Pick Lines
 cmd-desc-wall-tool-fillet = Rounds the corner between two straight walls with an arc wall of the radius in the options bar.
+cmd-desc-detail-tool-fillet = Rounds the corner between two straight detail lines with an arc of the options bar's radius.
 cmd-desc-wall-tool-pick-lines = Creates walls along the detail lines and grids clicked (with Chain, along the lines joined to them).
 why-wall-tool = Pick the Wall tool first
+why-detail-line-tool = Pick the Detail Line tool first
 opt-offset = Offset
 opt-radius = Radius
 opt-wall-join = Join

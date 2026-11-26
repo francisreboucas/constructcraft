@@ -106,6 +106,8 @@ pub enum UiCommand {
     WallFillet,
     /// The wall tool's *Pick Lines* mode: walls along detail lines and grids.
     WallPickLines,
+    /// The Detail Line tool's *Fillet Arc*: an arc rounding the corner of two straight detail lines.
+    DetailFillet,
     /// Open the sketch of the selected floor, ceiling, roof or mass.
     EditBoundary,
     /// Open the profile of the selected sweep's type in a sketch.
@@ -391,6 +393,7 @@ impl UiCommand {
             SketchCancel,
             WallFillet,
             WallPickLines,
+            DetailFillet,
             EditBoundary,
             EditProfile,
             EditWallProfile,
@@ -585,6 +588,7 @@ impl UiCommand {
             SketchCancel => Icon::Close,
             WallFillet => Icon::DrawFillet,
             WallPickLines => Icon::PickLines,
+            DetailFillet => Icon::DrawFillet,
             EditBoundary => Icon::EditBoundary,
             EditProfile => Icon::EditProfile,
             EditWallProfile | ResetWallProfile => Icon::WallProfile,
@@ -817,6 +821,7 @@ impl UiCommand {
             SketchCancel => t!("sketch-cancel-mode"),
             WallFillet => t!("wall-tool-fillet"),
             WallPickLines => t!("wall-tool-pick-lines"),
+            DetailFillet => t!("wall-tool-fillet"),
             EditBoundary => t!("edit-boundary"),
             EditProfile => t!("edit-profile"),
             EditWallProfile => t!("edit-wall-profile"),
@@ -1047,6 +1052,7 @@ impl UiCommand {
             SketchCancel => t!("cmd-desc-sketch-cancel-mode"),
             WallFillet => t!("cmd-desc-wall-tool-fillet"),
             WallPickLines => t!("cmd-desc-wall-tool-pick-lines"),
+            DetailFillet => t!("cmd-desc-detail-tool-fillet"),
             EditBoundary => t!("cmd-desc-edit-boundary"),
             EditProfile => t!("cmd-desc-edit-profile"),
             EditWallProfile => t!("cmd-desc-edit-wall-profile"),
@@ -1539,6 +1545,7 @@ impl UiCommand {
             Redo if !state.session.doc.can_redo() => Some(t!("why-nothing-redo")),
             // The wall tool draws with the same shapes.
             WallFillet | WallPickLines if !wall_drawing(state) => Some(t!("why-wall-tool")),
+            DetailFillet if !detail_drawing(state) => Some(t!("why-detail-line-tool")),
             command if wall_drawing(state) && wall_mode(command).is_some() => None,
             command if detail_draw(state, command).is_some() => None,
             SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse
@@ -1754,7 +1761,10 @@ impl UiCommand {
             command if wall_drawing(state) && wall_mode(command).is_some() => {
                 wall_mode(command) == Some(state.wall_mode)
             }
-            command if detail_draw(state, command).is_some() => detail_draw(state, command) == Some(state.detail.draw),
+            command if detail_draw(state, command).is_some() => {
+                !state.detail.fillet && detail_draw(state, command) == Some(state.detail.draw)
+            }
+            DetailFillet => detail_drawing(state) && state.detail.fillet,
             SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse
             | SketchSpline | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint => {
                 state.sketch.as_ref().is_some_and(|s| sketch_draw(self) == Some(s.draw))
@@ -1983,10 +1993,15 @@ fn wall_drawing(state: &AppState) -> bool {
     state.sketch.is_none() && matches!(state.tool, Tool::Wall { .. })
 }
 
+/// The Detail Line tool is drawing, outside a sketch: the Draw group's commands pick its shape.
+fn detail_drawing(state: &AppState) -> bool {
+    state.sketch.is_none() && state.tool == Tool::DetailLine
+}
+
 /// The shape of the Detail Line tool a Draw command picks, while that tool
 /// is active outside a sketch.
 fn detail_draw(state: &AppState, command: UiCommand) -> Option<crate::sketch_mode::Draw> {
-    if state.sketch.is_some() || state.tool != Tool::DetailLine {
+    if !detail_drawing(state) {
         return None;
     }
     sketch_draw(command).filter(|d| crate::detail_ui::DRAWS.contains(d))
@@ -2180,8 +2195,10 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         command if detail_draw(state, command).is_some() => {
             if let Some(draw) = detail_draw(state, command) {
                 state.detail.draw = draw;
+                state.detail.fillet = false;
             }
         }
+        DetailFillet => state.detail.fillet = true,
         WallFillet | WallPickLines => {}
         SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse | SketchSpline
         | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint => {

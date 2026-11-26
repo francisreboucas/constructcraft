@@ -2774,6 +2774,7 @@ tb-field-issue-date = Дата випуску
 category-detail-line = Лінія деталі
 tpl-type-detail-line = Лінія деталі
 tx-create-detail-lines = Створити лінії деталі
+tx-detail-line-fillet = Спряження ліній деталі
 line-style-thin = Тонка
 line-style-medium = Середня
 line-style-wide = Товста
@@ -2792,6 +2793,8 @@ detail-mode-circle = Коло
 detail-mode-ellipse = Еліпс
 detail-mode-spline = Сплайн
 hint-detail-line = Виберіть форму в групі «Креслення» і клацніть її точки; Esc завершує сплайн або скасовує криву
+hint-detail-fillet = Клацніть першу пряму лінію деталі
+hint-detail-fillet-second = Клацніть другу лінію деталі (Esc: вибрати іншу першу)
 
 # Line styles, filled and masking regions
 tx-line-style-create = Створити стиль лінії
@@ -4224,8 +4227,10 @@ ribbon-place-tool = Розмістити { $tool }
 wall-tool-fillet = Дуга скруглення
 wall-tool-pick-lines = Вибрати лінії
 cmd-desc-wall-tool-fillet = Скруглює кут між двома прямими стінами дуговою стіною радіуса з панелі параметрів.
+cmd-desc-detail-tool-fillet = Заокруглює кут між двома прямими лініями деталі дугою радіуса з панелі параметрів.
 cmd-desc-wall-tool-pick-lines = Створює стіни вздовж клацнутих ліній деталей і осей (з Ланцюжком — уздовж з’єднаних ліній).
 why-wall-tool = Спершу виберіть інструмент «Стіна»
+why-detail-line-tool = Спочатку виберіть інструмент «Лінія деталі»
 opt-offset = Зміщення
 opt-radius = Радіус
 opt-wall-join = Приєднувати

@@ -1505,7 +1505,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
             &[SketchLine, SketchRect, SketchPolygon],
             &[SketchPolygonOut, SketchCircle, SketchEllipse],
             &[SketchArc3, SketchArcCenter, SketchArcTangent],
-            &[SketchSpline],
+            &[DetailFillet, SketchSpline],
         ];
         group_with(ui, t!("group-draw"), true, None, |ui| stacks(ui, state, draw));
         let styles = launcher(state, LineStyles);

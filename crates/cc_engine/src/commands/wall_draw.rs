@@ -177,31 +177,8 @@ impl Command for WallFillet {
             let (Some(wa), Some(wb)) = (wall(e, a), wall(e, b)) else {
                 return Err(EngineError::not_found("wall"));
             };
-            // The corner: the ends of the two walls that now meet.
-            let ends = [(wa.start, true), (wa.end, false)];
-            let (corner, a_start) = ends
-                .into_iter()
-                .min_by(|x, y| {
-                    let d = |q: DVec2| q.distance(wb.start).min(q.distance(wb.end));
-                    d(x.0).total_cmp(&d(y.0))
-                })
-                .ok_or_else(|| EngineError::invalid("the walls do not meet"))?;
-            let b_start = wb.start.distance(corner) <= wb.end.distance(corner);
-            let far = |w: &Wall, start: bool| if start { w.end } else { w.start };
-            let (fa, fb) = (far(&wa, a_start), far(&wb, b_start));
-            let (Some(ua), Some(ub)) = ((fa - corner).try_normalize(), (fb - corner).try_normalize()) else {
-                return Err(EngineError::invalid("a wall has no length left"));
-            };
-            // Heading into the corner along `a`, then out along `b`.
-            let turn = (-ua).perp_dot(ub).atan2((-ua).dot(ub));
-            if turn.abs() < 1e-6 || turn.abs() > std::f64::consts::PI - 1e-6 {
-                return Err(EngineError::invalid("the walls are in line: there is no corner to round"));
-            }
-            let cut = radius * (turn.abs() / 2.0).tan();
-            if cut >= corner.distance(fa) - JOIN_TOL || cut >= corner.distance(fb) - JOIN_TOL {
-                return Err(EngineError::invalid(format!("the radius {radius} m is too large for these walls")));
-            }
-            let (ta, tb) = (corner + ua * cut, corner + ub * cut);
+            let RoundedCorner { a_start, b_start, ta, tb, bulge } =
+                round_corner((wa.start, wa.end), (wb.start, wb.end), radius, "walls")?;
             let set = |e: &mut cc_core::EditCtx, id, start: bool, to: DVec2| {
                 if let Some(w) = e.element_mut(id).and_then(|el| match &mut el.kind {
                     ElementKind::Wall(w) => Some(w),
@@ -220,7 +197,7 @@ impl Command for WallFillet {
             let arc = Wall {
                 start: ta,
                 end: tb,
-                bulge: (turn / 4.0).tan(),
+                bulge,
                 join_start: true,
                 join_end: true,
                 attach_top: None,
@@ -236,10 +213,51 @@ impl Command for WallFillet {
     }
 }
 
+/// Where an arc of `radius` rounds the corner between two straight
+/// segments that meet at an end: which end of each is at the corner, the
+/// points the arc leaves them (from `a` to `b`) and its bulge.
+pub(crate) struct RoundedCorner {
+    pub a_start: bool,
+    pub b_start: bool,
+    pub ta: DVec2,
+    pub tb: DVec2,
+    pub bulge: f64,
+}
+
+/// The arc of `radius` between segments `a` and `b` (their two ends) that
+/// meet at a corner; `what` names them in errors ("walls", "lines").
+pub(crate) fn round_corner(a: (DVec2, DVec2), b: (DVec2, DVec2), radius: f64, what: &str) -> Result<RoundedCorner> {
+    // The corner: the ends of the two segments that meet.
+    let (corner, a_start) = [(a.0, true), (a.1, false)]
+        .into_iter()
+        .min_by(|x, y| {
+            let d = |q: DVec2| q.distance(b.0).min(q.distance(b.1));
+            d(x.0).total_cmp(&d(y.0))
+        })
+        .ok_or_else(|| EngineError::invalid(format!("the {what} do not meet")))?;
+    let b_start = b.0.distance(corner) <= b.1.distance(corner);
+    let far = |s: (DVec2, DVec2), start: bool| if start { s.1 } else { s.0 };
+    let (fa, fb) = (far(a, a_start), far(b, b_start));
+    let (Some(ua), Some(ub)) = ((fa - corner).try_normalize(), (fb - corner).try_normalize()) else {
+        return Err(EngineError::invalid(format!("one of the {what} has no length left")));
+    };
+    // Heading into the corner along `a`, then out along `b`.
+    let turn = (-ua).perp_dot(ub).atan2((-ua).dot(ub));
+    if turn.abs() < 1e-6 || turn.abs() > std::f64::consts::PI - 1e-6 {
+        return Err(EngineError::invalid(format!("the {what} are in line: there is no corner to round")));
+    }
+    let cut = radius * (turn.abs() / 2.0).tan();
+    if cut >= corner.distance(fa) - JOIN_TOL || cut >= corner.distance(fb) - JOIN_TOL {
+        return Err(EngineError::invalid(format!("the radius {radius} m is too large for these {what}")));
+    }
+    Ok(RoundedCorner { a_start, b_start, ta: corner + ua * cut, tb: corner + ub * cut, bulge: (turn / 4.0).tan() })
+}
+
 /// The location lines of the walls drawn along `curves`: ellipses as
 /// splines, the corners between joined lines rounded to `radius`, and each
 /// chain moved `offset` to its left (outward when closed). What the wall
-/// tool previews and [`WallsCreate`] builds on.
+/// tool previews and [`WallsCreate`] builds on, and the shapes
+/// `detail_line_create` draws with an offset or a radius.
 pub fn location_curves(curves: &[SketchCurve], offset: f64, radius: f64) -> Result<Vec<SketchCurve>> {
     let curves: Vec<SketchCurve> = curves.iter().map(no_ellipse).collect::<Result<_>>()?;
     let mut done = vec![false; curves.len()];
