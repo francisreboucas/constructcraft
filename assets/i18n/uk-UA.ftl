@@ -2787,18 +2787,11 @@ group-detail = Деталь
 label-line-style = Стиль лінії
 prop-shape = Форма
 detail-mode-line = Лінія
-detail-mode-polyline = Полілінія
 detail-mode-arc3 = Дуга за 3 точками
-detail-mode-arc-center = Дуга від центру
 detail-mode-circle = Коло
 detail-mode-ellipse = Еліпс
 detail-mode-spline = Сплайн
-detail-mode-rectangle = Прямокутник
 hint-detail-line = Клацніть точки кривої (коло: центр і радіус; прямокутник: два кути); Esc скасовує криву
-hint-detail-polyline = Клацніть кожну вершину; полілінія триває, доки не замкнеться або Esc
-hint-detail-arc3 = Клацніть два кінці, потім точку на дузі
-hint-detail-arc-center = Клацніть центр, початок і кінець дуги
-hint-detail-ellipse = Клацніть центр, кінець однієї осі, потім половину іншої осі
 
 # Line styles, filled and masking regions
 tx-line-style-create = Створити стиль лінії

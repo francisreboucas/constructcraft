@@ -1817,7 +1817,18 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         }
         _ => {}
     }
-    let hint = match (s.draw, s.picks.len()) {
+    let hint = match s.draw {
+        Draw::TrimCorner if s.picked.is_some() => t!("hint-sketch-trim-corner-second"),
+        Draw::TrimExtend if s.picked.is_some() => t!("hint-sketch-trim-extend-second"),
+        draw => draw_hint(draw, s.picks.len()),
+    };
+    ui.label(theme::muted(hint));
+}
+
+/// What to click next with `draw`, `picks` points picked (also the Detail
+/// Line tool's hint).
+pub(crate) fn draw_hint(draw: Draw, picks: usize) -> String {
+    match (draw, picks) {
         (Draw::Select, _) => t!("hint-sketch-select"),
         (Draw::Line, 0) => t!("hint-sketch-line"),
         (Draw::Line, _) => t!("hint-sketch-line-next"),
@@ -1848,14 +1859,11 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         (Draw::MirrorPick, _) => t!("hint-sketch-mirror-pick"),
         (Draw::MirrorAxis, _) => t!("hint-mirror-draw"),
         (Draw::Offset, _) => t!("hint-sketch-offset"),
-        (Draw::TrimCorner, _) if s.picked.is_some() => t!("hint-sketch-trim-corner-second"),
         (Draw::TrimCorner, _) => t!("hint-sketch-trim-corner"),
-        (Draw::TrimExtend, _) if s.picked.is_some() => t!("hint-sketch-trim-extend-second"),
         (Draw::TrimExtend, _) => t!("hint-sketch-trim-extend"),
         (Draw::Split, _) => t!("hint-sketch-split"),
         (Draw::Point, _) => t!("hint-sketch-point"),
-    };
-    ui.label(theme::muted(hint));
+    }
 }
 
 /// The middle of the picked curves' extents.

@@ -1499,6 +1499,23 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
         ];
         group_with(ui, t!("group-draw"), true, None, |ui| stacks(ui, state, draw));
     }
+    // The Detail Line tool's shapes, and the style of the lines it draws.
+    if state.tool == Tool::DetailLine {
+        let draw: &[&[UiCommand]] = &[
+            &[SketchLine, SketchRect, SketchPolygon],
+            &[SketchPolygonOut, SketchCircle, SketchEllipse],
+            &[SketchArc3, SketchArcCenter, SketchArcTangent],
+            &[SketchSpline],
+        ];
+        group_with(ui, t!("group-draw"), true, None, |ui| stacks(ui, state, draw));
+        let styles = launcher(state, LineStyles);
+        group_with(ui, t!("label-line-style"), true, styles, |ui| {
+            ui.vertical(|ui| {
+                ui.add_space((BUTTON_HEIGHT - ui.spacing().interact_size.y).max(0.0) / 2.0);
+                crate::detail_ui::style_combo(ui, state);
+            });
+        });
+    }
     // What edits only the selected categories (and the active sheet), highlighted.
     for (caption, list) in commands::contextual(state) {
         group_with(ui, caption, true, None, |ui| command_buttons(ui, state, &list));
@@ -1508,7 +1525,7 @@ fn modify_tab(ui: &mut Ui, state: &mut AppState) {
 /// Whether `tool` has its own *Modify | Place …* tab, with its drawing
 /// modes, that the ribbon opens while it is active.
 pub fn places(tool: &Tool) -> bool {
-    matches!(tool, Tool::Wall { .. })
+    matches!(tool, Tool::Wall { .. } | Tool::DetailLine)
 }
 
 /// The Modify tab's title: "Modify | Place Wall" while such a tool is

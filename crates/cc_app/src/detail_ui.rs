@@ -1,11 +1,13 @@
-//! Detail lines in the app: the *Detail Line* tool (Annotate tab) with its
-//! line, polyline, arc, circle, ellipse and rectangle modes and the line
-//! style in the options bar, the grips of selected detail lines (ends,
-//! centers, an arc's middle, axis points), their properties, and their
-//! previews in the Split and Offset tools. The tool draws with the sketch
-//! mode's curve tools (see [`crate::sketch_mode::draw`]) and makes each
-//! curve an element through `detail_line_create` as soon as it is drawn;
-//! a polyline goes on from the last end until it closes or Esc.
+//! Detail lines in the app: the *Detail Line* tool (Annotate tab), whose
+//! *Modify | Place Detail Line* tab picks the shape (lines, rectangles,
+//! polygons, circles, ellipses, arcs, splines) and the line style, with
+//! chaining and polygon sides in the options bar; the grips of selected
+//! detail lines (ends, centers, an arc's middle, axis points), their
+//! properties, and their previews in the Split and Offset tools. The tool
+//! draws with the sketch mode's curve tools (see
+//! [`crate::sketch_mode::draw`]) and makes each curve an element through
+//! `detail_line_create` as soon as it is drawn; with *Chain*, lines and
+//! tangent arcs go on from the last end until the chain closes or Esc.
 
 use crate::paint::{HIGHLIGHT, PREVIEW, Xf};
 use crate::sketch_mode::{self, Draw, Session, Target};
@@ -28,65 +30,39 @@ const PICK_PX: f64 = 6.0;
 /// Curves kept for chaining and snapping while drawing (older ones are elements already).
 const MAX_KEPT: usize = 64;
 
-/// How the Detail Line tool draws.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum DetailMode {
-    /// One line from two points.
-    #[default]
-    Line,
-    /// Lines chained end to end.
-    Polyline,
-    /// An arc through its two ends and a point on it.
-    Arc3,
-    /// An arc by its center, start and end.
-    ArcCenter,
-    Circle,
-    Ellipse,
-    Rectangle,
-}
+/// The shapes the Detail Line tool draws, picked in the *Draw* group of its
+/// *Modify | Place Detail Line* tab.
+pub const DRAWS: [Draw; 10] = [
+    Draw::Line,
+    Draw::Rect,
+    Draw::Polygon,
+    Draw::PolygonOut,
+    Draw::Circle,
+    Draw::Ellipse,
+    Draw::Arc3,
+    Draw::ArcCenter,
+    Draw::ArcTangent,
+    Draw::Spline,
+];
 
-impl DetailMode {
-    pub const ALL: [DetailMode; 7] = [
-        DetailMode::Line,
-        DetailMode::Polyline,
-        DetailMode::Arc3,
-        DetailMode::ArcCenter,
-        DetailMode::Circle,
-        DetailMode::Ellipse,
-        DetailMode::Rectangle,
-    ];
-
-    pub fn key(self) -> &'static str {
-        match self {
-            DetailMode::Line => "detail-mode-line",
-            DetailMode::Polyline => "detail-mode-polyline",
-            DetailMode::Arc3 => "detail-mode-arc3",
-            DetailMode::ArcCenter => "detail-mode-arc-center",
-            DetailMode::Circle => "detail-mode-circle",
-            DetailMode::Ellipse => "detail-mode-ellipse",
-            DetailMode::Rectangle => "detail-mode-rectangle",
-        }
-    }
-
-    /// The sketch tool that draws it.
-    fn draw(self) -> Draw {
-        match self {
-            DetailMode::Line | DetailMode::Polyline => Draw::Line,
-            DetailMode::Arc3 => Draw::Arc3,
-            DetailMode::ArcCenter => Draw::ArcCenter,
-            DetailMode::Circle => Draw::Circle,
-            DetailMode::Ellipse => Draw::Ellipse,
-            DetailMode::Rectangle => Draw::Rect,
-        }
-    }
-}
-
-/// Options of the Detail Line tool (kept between uses, in the options bar).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Options of the Detail Line tool (kept between uses): the shape and line
+/// style from its ribbon tab, chaining and polygon sides from the options bar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DetailOptions {
-    pub mode: DetailMode,
+    /// One of [`DRAWS`].
+    pub draw: Draw,
+    /// Lines and tangent arcs go on from the last end, until the chain closes or Esc.
+    pub chain: bool,
+    /// Sides of the next polygon.
+    pub sides: usize,
     /// A built-in style or one of the project's.
     pub style: LineStyleRef,
+}
+
+impl Default for DetailOptions {
+    fn default() -> Self {
+        Self { draw: Draw::Line, chain: true, sides: 6, style: LineStyleRef::default() }
+    }
 }
 
 /// The curve being drawn in a view.
@@ -110,16 +86,19 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         _ => DetailDraw::new(view.id),
     };
     let opts = state.detail;
+    let draw = if DRAWS.contains(&opts.draw) { opts.draw } else { Draw::Line };
     let s = &mut d.session;
-    if s.draw != opts.mode.draw() {
+    if s.draw != draw {
         s.picks.clear();
     }
-    s.draw = opts.mode.draw();
-    s.chain = opts.mode == DetailMode::Polyline;
+    s.draw = draw;
+    s.chain = opts.chain;
+    s.sides = opts.sides.clamp(3, 64);
     if let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) {
-        // A new curve starts a new chain: what was drawn before is already in the view.
+        // A new curve starts a new chain: what was drawn before is already in
+        // the view. A tangent arc starts at the free end of a detail line there.
         if s.picks.is_empty() {
-            s.curves.clear();
+            s.curves = if draw == Draw::ArcTangent { lines_near(state, view.id, raw, xf.scale) } else { Vec::new() };
         }
         let shift = ui.input(|i| i.modifiers.shift);
         let extra = s.snap_points();
@@ -132,10 +111,14 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
             s.typed.clear();
         }
         let enter = !s.typed.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let before = s.curves.len();
+        // Enter ends a spline where it is.
+        if s.draw == Draw::Spline && s.typed.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            sketch_mode::finish_spline(s, false);
+        }
         let click = resp.clicked() || enter;
         let had_typed = !s.typed.is_empty();
         let p = s.typed_point(sn.point);
-        let before = s.curves.len();
         sketch_mode::draw(click, painter, s, p, xf, PICK_PX / xf.scale);
         if click && had_typed {
             s.typed.clear();
@@ -165,6 +148,22 @@ pub(crate) fn create(state: &mut AppState, view: ViewId, style: LineStyleRef, cu
         let ids = out["created"].as_array().map(|a| a.iter().filter_map(|v| v.as_u64()).map(ElementId).collect());
         state.selection = ids.unwrap_or_default();
     }
+}
+
+/// The curves of the detail lines of `view` passing near `p` (where a
+/// tangent arc starts), a few at most.
+fn lines_near(state: &AppState, view: ViewId, p: DVec2, scale: f64) -> Vec<SketchCurve> {
+    let r = PICK_PX / scale.max(1e-9);
+    state
+        .project()
+        .elements
+        .values()
+        .filter_map(|e| match &e.kind {
+            ElementKind::DetailLine(l) if l.view == view && near(l, p, r) => Some(l.curve.clone()),
+            _ => None,
+        })
+        .take(MAX_KEPT)
+        .collect()
 }
 
 /// The Detail Line tool takes typed values now: it has the first point of
@@ -197,6 +196,18 @@ pub fn escape(state: &mut AppState) -> bool {
     match state.detail_draw.as_mut() {
         Some(d) if !d.session.typed.is_empty() || d.session.typed.angle_active => {
             d.session.typed.clear();
+            true
+        }
+        // A spline ends where it is, as a chain of lines does.
+        Some(d) if d.session.draw == Draw::Spline && d.session.picks.len() >= 2 => {
+            let before = d.session.curves.len();
+            sketch_mode::finish_spline(&mut d.session, false);
+            let new = d.session.curves.get(before..).map(<[SketchCurve]>::to_vec).unwrap_or_default();
+            let view = d.view;
+            if !new.is_empty() {
+                let style = state.detail.style;
+                create(state, view, style, &new);
+            }
             true
         }
         Some(d) if !d.session.picks.is_empty() => {
@@ -370,29 +381,37 @@ pub fn offset_pick(
     true
 }
 
-/// The options bar of the Detail Line tool: the mode and the line style.
+/// The options bar of the Detail Line tool: chaining or polygon sides, and
+/// the hint of the shape being drawn (the shape and the line style are in
+/// its ribbon tab, see [`style_combo`]).
 pub fn options(ui: &mut Ui, state: &mut AppState) {
     let o = &mut state.detail;
-    for mode in DetailMode::ALL {
-        ui.selectable_value(&mut o.mode, mode, crate::i18n::tr(mode.key()));
+    match o.draw {
+        Draw::Line | Draw::ArcTangent => {
+            ui.checkbox(&mut o.chain, t!("sketch-chain"));
+            ui.separator();
+        }
+        Draw::Polygon | Draw::PolygonOut => {
+            ui.label(t!("sketch-sides"));
+            ui.add(egui::DragValue::new(&mut o.sides).range(3..=64));
+            ui.separator();
+        }
+        _ => {}
     }
-    ui.separator();
-    ui.label(t!("label-line-style"));
-    let mut style = Some(o.style);
+    let draw = o.draw;
+    let picks = state.detail_draw.as_ref().filter(|d| d.session.draw == draw).map_or(0, |d| d.session.picks.len());
+    ui.label(crate::theme::muted(sketch_mode::draw_hint(draw, picks)));
+}
+
+/// The *Line Style* group of the *Modify | Place Detail Line* tab: the
+/// style the next lines take.
+pub fn style_combo(ui: &mut Ui, state: &mut AppState) {
+    let mut style = Some(state.detail.style);
     if style_picker(ui, "detail-style", &state.session.doc.project.line_styles, &mut style, false)
         && let Some(s) = style
     {
         state.detail.style = s;
     }
-    let o = &state.detail;
-    let hint = match o.mode {
-        DetailMode::Polyline => "hint-detail-polyline",
-        DetailMode::Arc3 => "hint-detail-arc3",
-        DetailMode::ArcCenter => "hint-detail-arc-center",
-        DetailMode::Ellipse => "hint-detail-ellipse",
-        _ => "hint-detail-line",
-    };
-    ui.label(crate::theme::muted(crate::i18n::tr(hint)));
 }
 
 /// The name of a line style as shown: a built-in style's translated name,
@@ -481,9 +500,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn modes_map_to_sketch_tools() {
-        assert_eq!(DetailMode::Polyline.draw(), Draw::Line);
-        assert_eq!(DetailMode::Rectangle.draw(), Draw::Rect);
+    fn detail_lines_are_found_near_a_point() {
+        assert!(DetailOptions::default().chain && DRAWS.contains(&DetailOptions::default().draw));
         let line = DetailLine {
             view: ViewId(1),
             curve: SketchCurve::Line { a: DVec2::ZERO, b: DVec2::new(2.0, 0.0) },

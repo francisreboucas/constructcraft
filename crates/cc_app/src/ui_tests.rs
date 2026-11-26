@@ -121,6 +121,10 @@ fn ribbon_snapshots() {
     let wall = state.project().default_type(cc_core::Category::Wall).unwrap();
     state.set_tool(crate::tools::Tool::Wall { type_id: wall });
     results.add(ribbon_harness(state, 1600.0).try_snapshot("ribbon_place_wall"));
+    // The Detail Line tool: Modify | Place Detail Line with Draw and Line Style.
+    let mut state = sample_state();
+    state.set_tool(crate::tools::Tool::DetailLine);
+    results.add(ribbon_harness(state, 1600.0).try_snapshot("ribbon_place_detail_line"));
     // A floor sketch: Modify | Create Boundary with its Draw and Mode groups.
     let mut state = sample_state();
     let floor = state.project().default_type(cc_core::Category::Floor).unwrap();
@@ -414,6 +418,13 @@ fn ribbon_buttons_are_accessible() {
     for node in harness.query_all_by_role(Role::Button) {
         found.insert(node.accesskit_node().label().unwrap_or_default());
     }
+    // And the Detail Line tool's Modify | Place Detail Line tab.
+    let mut state = sample_state();
+    state.set_tool(crate::tools::Tool::DetailLine);
+    let harness = ribbon_harness(state, 2400.0);
+    for node in harness.query_all_by_role(Role::Button) {
+        found.insert(node.accesskit_node().label().unwrap_or_default());
+    }
     // So does an open sketch.
     let mut state = sample_state();
     let floor = state.project().default_type(cc_core::Category::Floor).unwrap();
@@ -473,6 +484,112 @@ fn wall_tool_draw_modes_are_in_its_modify_tab() {
     }
     harness.state_mut().set_tool(Tool::Select);
     assert_eq!(harness.state().ribbon_tab, RibbonTab::Architecture, "back to the tab shown before");
+}
+
+/// The Detail Line tool opens *Modify | Place Detail Line*: its Draw group
+/// picks the shape, the Line Style group the style; the options bar keeps
+/// Chain (lines) or Sides (polygons); leaving the tool goes back.
+#[test]
+fn detail_line_tool_shapes_are_in_its_modify_tab() {
+    use crate::sketch_mode::Draw;
+    use crate::tools::Tool;
+    let mut state = sample_state();
+    state.ribbon_tab = RibbonTab::Annotate;
+    state.set_tool(Tool::DetailLine);
+    assert_eq!(state.ribbon_tab, RibbonTab::Modify);
+    let mut harness = ribbon_harness(state, 2400.0);
+    let tool = crate::i18n::tr("tool-detail-line");
+    let title = format!("{} | {}", t!("ribbon-modify"), t!("ribbon-place-tool", "tool" => tool));
+    assert!(harness.query_by_label(&title).is_some(), "the tab names the tool");
+    assert!(harness.query_by_label(&t!("label-line-style")).is_some(), "the line style group");
+    assert_eq!(harness.state().detail.draw, Draw::Line);
+    for (label, draw) in [
+        (t!("sketch-tool-rect"), Draw::Rect),
+        (t!("sketch-tool-polygon"), Draw::Polygon),
+        (t!("sketch-tool-circle"), Draw::Circle),
+        (t!("sketch-tool-arc-tangent"), Draw::ArcTangent),
+        (t!("sketch-tool-spline"), Draw::Spline),
+        (t!("sketch-tool-line"), Draw::Line),
+    ] {
+        harness.get_by_role_and_label(Role::Button, &label).click();
+        harness.run();
+        assert_eq!(harness.state().detail.draw, draw, "{label}");
+    }
+    // Wall-only modes stay out.
+    assert!(harness.query_by_label(&t!("wall-tool-fillet")).is_none());
+    harness.state_mut().set_tool(Tool::Select);
+    assert_eq!(harness.state().ribbon_tab, RibbonTab::Annotate, "back to the tab shown before");
+
+    // The options bar: Chain for lines, Sides for polygons.
+    let mut state = sample_state();
+    state.set_tool(Tool::DetailLine);
+    state.detail.draw = Draw::Polygon;
+    let mut bar = themed_harness(state, egui::vec2(1600.0, 60.0), egui::Theme::Light, |ui, state| {
+        crate::ribbon::options_bar(ui, state)
+    });
+    assert!(bar.query_by_label(&t!("sketch-sides")).is_some());
+    bar.state_mut().detail.draw = Draw::Line;
+    bar.run();
+    assert!(bar.query_by_label(&t!("sketch-chain")).is_some());
+}
+
+/// The Detail Line tool draws polygons and splines too: a hexagon is six
+/// detail lines, and Enter ends a spline as one detail line.
+#[test]
+fn detail_line_tool_draws_polygons_and_splines() {
+    use crate::sketch_mode::Draw;
+    use cc_core::sketch::SketchCurve;
+    let mut state = sample_state();
+    let made = crate::actions::run_command(
+        &mut state,
+        cc_engine::commands::views::ViewCreate { kind: "drafting".into(), ..Default::default() },
+    );
+    let view = cc_core::ViewId(made.unwrap()["id"].as_u64().unwrap());
+    state.active_view = Some(view);
+    state.set_tool(crate::tools::Tool::DetailLine);
+    state.detail.draw = Draw::Polygon;
+    let mut harness = themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, |ui, state| {
+        crate::app::shortcuts(ui.ctx(), state);
+        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click());
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin: glam::DVec2::ZERO, scale: 20.0 };
+        let Some(view) = state.active_view.and_then(|v| state.project().view(v).cloned()) else { return };
+        crate::detail_ui::tool(ui, &resp, &painter, state, &view, &xf);
+    });
+    harness.run();
+    let click = |h: &mut Harness<'static, AppState>, pos: egui::Pos2| {
+        h.input_mut().events.push(egui::Event::PointerMoved(pos));
+        h.run();
+        for pressed in [true, false] {
+            let (button, modifiers) = (egui::PointerButton::Primary, egui::Modifiers::NONE);
+            h.input_mut().events.push(egui::Event::PointerButton { pos, button, pressed, modifiers });
+            h.run();
+        }
+    };
+    let lines = |h: &Harness<'static, AppState>| -> Vec<SketchCurve> {
+        h.state()
+            .project()
+            .elements
+            .values()
+            .filter_map(|e| match &e.kind {
+                cc_core::ElementKind::DetailLine(l) if l.view == view => Some(l.curve.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    click(&mut harness, egui::pos2(150.0, 200.0));
+    click(&mut harness, egui::pos2(190.0, 200.0));
+    assert_eq!(lines(&harness).len(), 6, "{}", harness.state().message);
+
+    harness.state_mut().detail.draw = Draw::Spline;
+    harness.run();
+    for (x, y) in [(300.0, 100.0), (360.0, 140.0), (420.0, 100.0)] {
+        click(&mut harness, egui::pos2(x, y));
+    }
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    let made = lines(&harness);
+    assert_eq!(made.len(), 7, "{}", harness.state().message);
+    assert!(made.iter().any(|c| matches!(c, SketchCurve::Spline { .. })));
 }
 
 /// The options bar of a shape mode shows its offset, radius and sides.
@@ -5333,7 +5450,6 @@ fn new_asks_for_the_template() {
 /// places them and Esc drops the value first.
 #[test]
 fn detail_lines_take_typed_lengths() {
-    use crate::detail_ui::DetailMode;
     use cc_core::sketch::SketchCurve;
     let mut state = sample_state();
     let made = crate::actions::run_command(
@@ -5343,7 +5459,7 @@ fn detail_lines_take_typed_lengths() {
     let view = cc_core::ViewId(made.unwrap()["id"].as_u64().unwrap());
     state.active_view = Some(view);
     state.set_tool(crate::tools::Tool::DetailLine);
-    state.detail.mode = DetailMode::Circle;
+    state.detail.draw = crate::sketch_mode::Draw::Circle;
     // The app's keys and the tool on a canvas, 20 points per meter around the origin.
     let mut harness = themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, |ui, state| {
         crate::app::shortcuts(ui.ctx(), state);
@@ -5394,7 +5510,8 @@ fn detail_lines_take_typed_lengths() {
     assert!((radius - 2.0).abs() < 1e-9, "{radius}");
 
     // Esc drops the typed value before the first point.
-    harness.state_mut().detail.mode = DetailMode::Line;
+    harness.state_mut().detail.draw = crate::sketch_mode::Draw::Line;
+    harness.state_mut().detail.chain = false;
     let start = center + egui::vec2(0.0, 100.0);
     pointer(&mut harness, start, true);
     pointer(&mut harness, start + egui::vec2(40.0, 0.0), false);

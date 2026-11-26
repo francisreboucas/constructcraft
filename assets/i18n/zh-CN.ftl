@@ -2786,18 +2786,11 @@ group-detail = 详图
 label-line-style = 线型
 prop-shape = 形状
 detail-mode-line = 直线
-detail-mode-polyline = 多段线
 detail-mode-arc3 = 三点圆弧
-detail-mode-arc-center = 圆心圆弧
 detail-mode-circle = 圆
 detail-mode-ellipse = 椭圆
 detail-mode-spline = 样条曲线
-detail-mode-rectangle = 矩形
 hint-detail-line = 单击曲线的点（圆：圆心和半径；矩形：两个角点）；Esc 放弃曲线
-hint-detail-polyline = 单击每个顶点；多段线持续到闭合或按 Esc
-hint-detail-arc3 = 单击两端，再单击圆弧上一点
-hint-detail-arc-center = 单击圆弧的圆心、起点和终点
-hint-detail-ellipse = 单击中心、一轴的端点，再单击另一轴的一半
 
 # Line styles, filled and masking regions
 tx-line-style-create = 创建线样式

@@ -2786,18 +2786,11 @@ group-detail = 詳細
 label-line-style = 線種
 prop-shape = 形状
 detail-mode-line = 線
-detail-mode-polyline = ポリライン
 detail-mode-arc3 = 3 点円弧
-detail-mode-arc-center = 中心円弧
 detail-mode-circle = 円
 detail-mode-ellipse = 楕円
 detail-mode-spline = スプライン
-detail-mode-rectangle = 長方形
 hint-detail-line = 曲線の点をクリック（円: 中心と半径、長方形: 2 つの角）。Esc で曲線を破棄
-hint-detail-polyline = 各頂点をクリック。ポリラインは閉じるか Esc まで続きます
-hint-detail-arc3 = 両端をクリックし、次に円弧上の点をクリック
-hint-detail-arc-center = 円弧の中心、始点、終点をクリック
-hint-detail-ellipse = 中心、一方の軸の端点、次にもう一方の軸の半分をクリック
 
 # Line styles, filled and masking regions
 tx-line-style-create = 線種を作成

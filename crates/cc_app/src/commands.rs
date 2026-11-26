@@ -1540,6 +1540,7 @@ impl UiCommand {
             // The wall tool draws with the same shapes.
             WallFillet | WallPickLines if !wall_drawing(state) => Some(t!("why-wall-tool")),
             command if wall_drawing(state) && wall_mode(command).is_some() => None,
+            command if detail_draw(state, command).is_some() => None,
             SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse
             | SketchSpline | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint | SketchPickWalls
             | SketchFinish | SketchCancel
@@ -1753,6 +1754,7 @@ impl UiCommand {
             command if wall_drawing(state) && wall_mode(command).is_some() => {
                 wall_mode(command) == Some(state.wall_mode)
             }
+            command if detail_draw(state, command).is_some() => detail_draw(state, command) == Some(state.detail.draw),
             SketchLine | SketchRect | SketchPolygon | SketchPolygonOut | SketchCircle | SketchEllipse
             | SketchSpline | SketchArc3 | SketchArcCenter | SketchArcTangent | SketchPoint => {
                 state.sketch.as_ref().is_some_and(|s| sketch_draw(self) == Some(s.draw))
@@ -1981,6 +1983,15 @@ fn wall_drawing(state: &AppState) -> bool {
     state.sketch.is_none() && matches!(state.tool, Tool::Wall { .. })
 }
 
+/// The shape of the Detail Line tool a Draw command picks, while that tool
+/// is active outside a sketch.
+fn detail_draw(state: &AppState, command: UiCommand) -> Option<crate::sketch_mode::Draw> {
+    if state.sketch.is_some() || state.tool != Tool::DetailLine {
+        return None;
+    }
+    sketch_draw(command).filter(|d| crate::detail_ui::DRAWS.contains(d))
+}
+
 /// The wall tool's mode a Draw command picks.
 fn wall_mode(command: UiCommand) -> Option<crate::tools::WallMode> {
     use crate::tools::WallMode;
@@ -2164,6 +2175,11 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
         command if wall_drawing(state) && wall_mode(command).is_some() => {
             if let Some(mode) = wall_mode(command) {
                 crate::wall_draw_ui::set_mode(state, mode);
+            }
+        }
+        command if detail_draw(state, command).is_some() => {
+            if let Some(draw) = detail_draw(state, command) {
+                state.detail.draw = draw;
             }
         }
         WallFillet | WallPickLines => {}

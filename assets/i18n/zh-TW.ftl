@@ -2786,18 +2786,11 @@ group-detail = 詳圖
 label-line-style = 線型
 prop-shape = 形狀
 detail-mode-line = 直線
-detail-mode-polyline = 聚合線
 detail-mode-arc3 = 三點弧
-detail-mode-arc-center = 圓心弧
 detail-mode-circle = 圓
 detail-mode-ellipse = 橢圓
 detail-mode-spline = 雲形線
-detail-mode-rectangle = 矩形
 hint-detail-line = 點選曲線的點（圓：圓心與半徑；矩形：兩個角點）；Esc 放棄曲線
-hint-detail-polyline = 點選每個頂點；聚合線持續到封閉或按 Esc
-hint-detail-arc3 = 點選兩端，再點選弧上一點
-hint-detail-arc-center = 點選弧的圓心、起點與終點
-hint-detail-ellipse = 點選中心、一軸的端點，再點選另一軸的一半
 
 # Line styles, filled and masking regions
 tx-line-style-create = 建立線條樣式

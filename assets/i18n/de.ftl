@@ -2786,18 +2786,11 @@ group-detail = Detail
 label-line-style = Linienstil
 prop-shape = Form
 detail-mode-line = Linie
-detail-mode-polyline = Polylinie
 detail-mode-arc3 = Bogen durch 3 Punkte
-detail-mode-arc-center = Bogen um Mittelpunkt
 detail-mode-circle = Kreis
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
-detail-mode-rectangle = Rechteck
 hint-detail-line = Klicken Sie die Punkte der Kurve (Kreis: Mittelpunkt und Radius; Rechteck: zwei Ecken); Esc verwirft die Kurve
-hint-detail-polyline = Klicken Sie jeden Eckpunkt; die Polylinie geht weiter, bis sie sich schließt oder Esc
-hint-detail-arc3 = Klicken Sie die beiden Enden, dann einen Punkt auf dem Bogen
-hint-detail-arc-center = Klicken Sie Mittelpunkt, Anfang und Ende des Bogens
-hint-detail-ellipse = Klicken Sie den Mittelpunkt, das Ende einer Achse, dann die halbe andere Achse
 
 # Line styles, filled and masking regions
 tx-line-style-create = Linienstil erstellen

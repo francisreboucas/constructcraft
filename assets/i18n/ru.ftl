@@ -2786,18 +2786,11 @@ group-detail = Детализация
 label-line-style = Стиль линий
 prop-shape = Форма
 detail-mode-line = Линия
-detail-mode-polyline = Полилиния
 detail-mode-arc3 = Дуга по 3 точкам
-detail-mode-arc-center = Дуга по центру
 detail-mode-circle = Окружность
 detail-mode-ellipse = Эллипс
 detail-mode-spline = Сплайн
-detail-mode-rectangle = Прямоугольник
 hint-detail-line = Укажите точки кривой (окружность — центр и радиус, прямоугольник — два угла) · Esc — отменить кривую
-hint-detail-polyline = Щёлкайте вершины полилинии, пока она не замкнётся. Чтобы закончить раньше, нажмите Esc.
-hint-detail-arc3 = Щёлкните два конца, затем точку на дуге
-hint-detail-arc-center = Щёлкните центр, начало и конец дуги
-hint-detail-ellipse = Укажите центр, затем конец одной полуоси и длину другой
 
 # Line styles, filled and masking regions
 tx-line-style-create = Создание стиля линий

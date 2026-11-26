@@ -2786,18 +2786,11 @@ group-detail = Szczegół
 label-line-style = Styl linii
 prop-shape = Kształt
 detail-mode-line = Linia
-detail-mode-polyline = Polilinia
 detail-mode-arc3 = Łuk przez 3 punkty
-detail-mode-arc-center = Łuk od środka
 detail-mode-circle = Okrąg
 detail-mode-ellipse = Elipsa
 detail-mode-spline = Splajn
-detail-mode-rectangle = Prostokąt
 hint-detail-line = Kliknij punkty krzywej (okrąg: środek i promień; prostokąt: dwa narożniki); Esc porzuca krzywą
-hint-detail-polyline = Kliknij każdy wierzchołek; polilinia trwa, aż się zamknie lub Esc
-hint-detail-arc3 = Kliknij dwa końce, potem punkt na łuku
-hint-detail-arc-center = Kliknij środek, początek i koniec łuku
-hint-detail-ellipse = Kliknij środek, koniec jednej osi, potem połowę drugiej osi
 
 # Line styles, filled and masking regions
 tx-line-style-create = Utwórz styl linii

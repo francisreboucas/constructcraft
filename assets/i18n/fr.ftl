@@ -2786,18 +2786,11 @@ group-detail = Détail
 label-line-style = Style de ligne
 prop-shape = Forme
 detail-mode-line = Ligne
-detail-mode-polyline = Polyligne
 detail-mode-arc3 = Arc par 3 points
-detail-mode-arc-center = Arc par centre
 detail-mode-circle = Cercle
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
-detail-mode-rectangle = Rectangle
 hint-detail-line = Cliquez les points de la courbe (cercle : centre et rayon ; rectangle : deux coins) ; Échap abandonne la courbe
-hint-detail-polyline = Cliquez chaque sommet ; la polyligne continue jusqu'à se fermer ou Échap
-hint-detail-arc3 = Cliquez les deux extrémités, puis un point de l'arc
-hint-detail-arc-center = Cliquez le centre, le début et la fin de l'arc
-hint-detail-ellipse = Cliquez le centre, l'extrémité d'un axe, puis la moitié de l'autre axe
 
 # Line styles, filled and masking regions
 tx-line-style-create = Créer un style de ligne

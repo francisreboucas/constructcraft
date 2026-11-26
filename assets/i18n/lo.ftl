@@ -2788,18 +2788,11 @@ group-detail = ລາຍລະອຽດ
 label-line-style = ຮູບແບບເສັ້ນ
 prop-shape = ຮູບຮ່າງ
 detail-mode-line = ເສັ້ນ
-detail-mode-polyline = ເສັ້ນຫຼາຍທ່ອນ
 detail-mode-arc3 = ເສັ້ນໂຄ້ງ 3 ຈຸດ
-detail-mode-arc-center = ເສັ້ນໂຄ້ງຈາກຈຸດສູນກາງ
 detail-mode-circle = ວົງມົນ
 detail-mode-ellipse = ວົງຣີ
 detail-mode-spline = ເສັ້ນໂຄ້ງ Spline
-detail-mode-rectangle = ຮູບສີ່ຫຼ່ຽມ
 hint-detail-line = ຄລິກຈຸດຂອງເສັ້ນ (ວົງມົນ: ຈຸດສູນກາງ ແລະ ລັດສະໝີ; ສີ່ຫຼ່ຽມ: ສອງມຸມ); Esc ຍົກເລີກເສັ້ນ
-hint-detail-polyline = ຄລິກແຕ່ລະຈຸດ; ເສັ້ນຫຼາຍທ່ອນຈະສືບຕໍ່ຈົນປິດ ຫຼື Esc
-hint-detail-arc3 = ຄລິກສອງປາຍ, ແລ້ວຈຸດໜຶ່ງເທິງເສັ້ນໂຄ້ງ
-hint-detail-arc-center = ຄລິກຈຸດສູນກາງ, ຈຸດເລີ່ມ ແລະ ຈຸດສິ້ນສຸດຂອງເສັ້ນໂຄ້ງ
-hint-detail-ellipse = ຄລິກຈຸດສູນກາງ, ປາຍແກນໜຶ່ງ, ແລ້ວເຄິ່ງໜຶ່ງຂອງແກນອື່ນ
 
 # Line styles, filled and masking regions
 tx-line-style-create = ສ້າງຮູບແບບເສັ້ນ
