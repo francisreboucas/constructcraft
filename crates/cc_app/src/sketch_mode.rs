@@ -33,6 +33,9 @@ use std::collections::BTreeSet;
 const SKETCH: Color32 = Color32::from_rgb(200, 40, 160);
 /// Most sketch states kept for undo.
 const MAX_UNDO: usize = 200;
+/// The fewest and most sides a polygon takes.
+pub(crate) const MIN_SIDES: usize = 3;
+pub(crate) const MAX_SIDES: usize = 64;
 /// Pick distance on screen, points.
 const PICK_PX: f64 = 6.0;
 
@@ -1396,7 +1399,7 @@ fn next_curves(s: &Session, picks: &[DVec2], p: DVec2, tol: f64) -> Option<Vec<S
         (Draw::Line, [a]) => Some(vec![SketchCurve::Line { a: *a, b: p }]),
         (Draw::Rect, [a]) => A::Rectangle { corner: a.to_array(), opposite: p.to_array(), rotation: 0.0 }.curves().ok(),
         (Draw::Polygon | Draw::PolygonOut, [c]) => {
-            let sides = s.sides.clamp(3, 64);
+            let sides = s.sides.clamp(MIN_SIDES, MAX_SIDES);
             let inscribed = s.draw == Draw::Polygon;
             // Circumscribed, the cursor marks the middle of a side: the first corner is half a side further round.
             let half = if inscribed { 0.0 } else { 180.0 / sides as f64 };
@@ -1772,7 +1775,7 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         }
         Draw::Polygon | Draw::PolygonOut => {
             ui.label(t!("sketch-sides"));
-            ui.add(egui::DragValue::new(&mut s.sides).range(3..=64));
+            ui.add(egui::DragValue::new(&mut s.sides).range(MIN_SIDES..=MAX_SIDES));
             ui.separator();
         }
         Draw::Copy => {

@@ -534,7 +534,8 @@ fn detail_line_tool_shapes_are_in_its_modify_tab() {
 }
 
 /// The Detail Line tool draws polygons and splines too: a hexagon is six
-/// detail lines, and Enter ends a spline as one detail line.
+/// detail lines, Enter ends a spline as one detail line (wherever the
+/// pointer is), and a tangent arc starts only at a free end.
 #[test]
 fn detail_line_tool_draws_polygons_and_splines() {
     use crate::sketch_mode::Draw;
@@ -585,11 +586,36 @@ fn detail_line_tool_draws_polygons_and_splines() {
     for (x, y) in [(300.0, 100.0), (360.0, 140.0), (420.0, 100.0)] {
         click(&mut harness, egui::pos2(x, y));
     }
+    // Enter ends it even with the pointer off the view.
+    harness.input_mut().events.push(egui::Event::PointerGone);
+    harness.run();
     harness.key_press(egui::Key::Enter);
     harness.run();
     let made = lines(&harness);
     assert_eq!(made.len(), 7, "{}", harness.state().message);
     assert!(made.iter().any(|c| matches!(c, SketchCurve::Spline { .. })));
+
+    // Two chained lines A-B-C; a tangent arc starts at the free end A, not at B.
+    let (a, b, c) = (egui::pos2(100.0, 300.0), egui::pos2(200.0, 300.0), egui::pos2(200.0, 250.0));
+    harness.state_mut().detail.draw = Draw::Line;
+    harness.run();
+    for p in [a, b, c] {
+        click(&mut harness, p);
+    }
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert_eq!(lines(&harness).len(), 9, "{}", harness.state().message);
+    harness.state_mut().detail.draw = Draw::ArcTangent;
+    harness.state_mut().detail.chain = false;
+    harness.run();
+    click(&mut harness, b);
+    click(&mut harness, egui::pos2(260.0, 240.0));
+    assert_eq!(lines(&harness).len(), 9, "a joined end is no start");
+    click(&mut harness, a);
+    click(&mut harness, egui::pos2(60.0, 260.0));
+    let made = lines(&harness);
+    assert_eq!(made.len(), 10, "{}", harness.state().message);
+    assert!(made.iter().any(|c| matches!(c, SketchCurve::Arc { .. })));
 }
 
 /// The options bar of a shape mode shows its offset, radius and sides.

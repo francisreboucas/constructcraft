@@ -2790,7 +2790,7 @@ detail-mode-arc3 = Arc par 3 points
 detail-mode-circle = Cercle
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
-hint-detail-line = Cliquez les points de la courbe (cercle : centre et rayon ; rectangle : deux coins) ; Échap abandonne la courbe
+hint-detail-line = Choisissez la forme dans le groupe Dessiner et cliquez ses points ; Échap termine une spline ou abandonne la courbe
 
 # Line styles, filled and masking regions
 tx-line-style-create = Créer un style de ligne

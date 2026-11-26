@@ -2790,7 +2790,7 @@ detail-mode-arc3 = 三点圆弧
 detail-mode-circle = 圆
 detail-mode-ellipse = 椭圆
 detail-mode-spline = 样条曲线
-hint-detail-line = 单击曲线的点（圆：圆心和半径；矩形：两个角点）；Esc 放弃曲线
+hint-detail-line = 在“绘制”组中选择形状并单击其点；Esc 结束样条曲线或放弃曲线
 
 # Line styles, filled and masking regions
 tx-line-style-create = 创建线样式

@@ -2790,7 +2790,7 @@ detail-mode-arc3 = Bogen durch 3 Punkte
 detail-mode-circle = Kreis
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
-hint-detail-line = Klicken Sie die Punkte der Kurve (Kreis: Mittelpunkt und Radius; Rechteck: zwei Ecken); Esc verwirft die Kurve
+hint-detail-line = Wählen Sie die Form in der Gruppe Zeichnen und klicken Sie ihre Punkte; Esc beendet einen Spline oder verwirft die Kurve
 
 # Line styles, filled and masking regions
 tx-line-style-create = Linienstil erstellen

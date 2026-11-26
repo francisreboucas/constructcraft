@@ -16,7 +16,7 @@ use crate::t;
 use crate::table::{readonly_row, row, section};
 use crate::tools::{Drag, Tool, TypedInput, draw_snap, snap_at};
 use cc_core::detail::{DetailLine, DetailStyle, LineStyleRef, LineStyles};
-use cc_core::sketch::SketchCurve;
+use cc_core::sketch::{JOIN_TOL, SketchCurve};
 use cc_core::{ElementId, ElementKind, ViewId};
 use cc_engine::Ref;
 use cc_engine::commands::detail::DetailLineCreate;
@@ -29,6 +29,8 @@ use glam::DVec2;
 const PICK_PX: f64 = 6.0;
 /// Curves kept for chaining and snapping while drawing (older ones are elements already).
 const MAX_KEPT: usize = 64;
+/// Detail lines of a view read for the start of a tangent arc.
+const MAX_VIEW_LINES: usize = 100_000;
 
 /// The shapes the Detail Line tool draws, picked in the *Draw* group of its
 /// *Modify | Place Detail Line* tab.
@@ -70,11 +72,47 @@ impl Default for DetailOptions {
 pub struct DetailDraw {
     view: ViewId,
     session: Session,
+    /// The open curves of the view's detail lines (where a tangent arc may
+    /// start), read once per document revision.
+    lines: Option<(u64, Vec<SketchCurve>)>,
 }
 
 impl DetailDraw {
     fn new(view: ViewId) -> Self {
-        Self { view, session: Session::new(Target::Detail, Vec::new()) }
+        Self { view, session: Session::new(Target::Detail, Vec::new()), lines: None }
+    }
+
+    /// The curves a tangent arc started at `p` must see: the view's detail
+    /// lines with an end within `r` of `p`, and those joined to such an end
+    /// (so a joined end is not taken for a free one).
+    fn tangent_starts(&mut self, state: &AppState, p: DVec2, r: f64) -> Vec<SketchCurve> {
+        let revision = state.session.doc.revision();
+        if self.lines.as_ref().is_none_or(|(rev, _)| *rev != revision) {
+            let view = self.view;
+            let lines = state
+                .project()
+                .elements
+                .values()
+                .filter_map(|e| match &e.kind {
+                    ElementKind::DetailLine(l) if l.view == view && l.curve.ends().is_some() => Some(l.curve.clone()),
+                    _ => None,
+                })
+                .take(MAX_VIEW_LINES)
+                .collect();
+            self.lines = Some((revision, lines));
+        }
+        let Some((_, lines)) = self.lines.as_ref() else { return Vec::new() };
+        let ends = |c: &SketchCurve| c.ends().map(|(a, b)| [a, b]).unwrap_or([DVec2::NAN; 2]);
+        let near: Vec<DVec2> = lines.iter().flat_map(ends).filter(|q| q.distance(p) <= r).take(MAX_KEPT).collect();
+        if near.is_empty() {
+            return Vec::new();
+        }
+        lines
+            .iter()
+            .filter(|c| ends(c).iter().any(|q| near.iter().any(|n| n.distance(*q) <= JOIN_TOL)))
+            .take(MAX_KEPT)
+            .cloned()
+            .collect()
     }
 }
 
@@ -93,13 +131,24 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
     }
     s.draw = draw;
     s.chain = opts.chain;
-    s.sides = opts.sides.clamp(3, 64);
+    s.sides = opts.sides.clamp(sketch_mode::MIN_SIDES, sketch_mode::MAX_SIDES);
+    // Enter ends a spline where it is, wherever the pointer is.
+    let mut new = Vec::new();
+    if s.draw == Draw::Spline && s.typed.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        new = finish_spline(s);
+    }
     if let Some(raw) = resp.hover_pos().map(|p| xf.to_world(p)) {
         // A new curve starts a new chain: what was drawn before is already in
         // the view. A tangent arc starts at the free end of a detail line there.
-        if s.picks.is_empty() {
-            s.curves = if draw == Draw::ArcTangent { lines_near(state, view.id, raw, xf.scale) } else { Vec::new() };
+        if d.session.picks.is_empty() {
+            let starts = if draw == Draw::ArcTangent {
+                d.tangent_starts(state, raw, PICK_PX / xf.scale.max(1e-9))
+            } else {
+                Vec::new()
+            };
+            d.session.curves = starts;
         }
+        let s = &mut d.session;
         let shift = ui.input(|i| i.modifiers.shift);
         let extra = s.snap_points();
         let anchor = s.picks.last().copied();
@@ -112,10 +161,6 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         }
         let enter = !s.typed.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let before = s.curves.len();
-        // Enter ends a spline where it is.
-        if s.draw == Draw::Spline && s.typed.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            sketch_mode::finish_spline(s, false);
-        }
         let click = resp.clicked() || enter;
         let had_typed = !s.typed.is_empty();
         let p = s.typed_point(sn.point);
@@ -123,16 +168,23 @@ pub fn tool(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, v
         if click && had_typed {
             s.typed.clear();
         }
-        let new: Vec<SketchCurve> = s.curves.get(before..).map(<[SketchCurve]>::to_vec).unwrap_or_default();
+        new.extend(s.curves.get(before..).unwrap_or_default().iter().cloned());
         if s.curves.len() > MAX_KEPT {
             let extra = s.curves.len() - MAX_KEPT;
             s.curves.drain(..extra);
         }
-        if !new.is_empty() {
-            create(state, view.id, opts.style, &new);
-        }
+    }
+    if !new.is_empty() {
+        create(state, view.id, opts.style, &new);
     }
     state.detail_draw = Some(d);
+}
+
+/// End the spline being drawn where it is; returns the curve it made.
+fn finish_spline(s: &mut Session) -> Vec<SketchCurve> {
+    let before = s.curves.len();
+    sketch_mode::finish_spline(s, false);
+    s.curves.get(before..).map(<[SketchCurve]>::to_vec).unwrap_or_default()
 }
 
 /// Make `curves` detail lines of `view` (one undo step); they are selected.
@@ -148,22 +200,6 @@ pub(crate) fn create(state: &mut AppState, view: ViewId, style: LineStyleRef, cu
         let ids = out["created"].as_array().map(|a| a.iter().filter_map(|v| v.as_u64()).map(ElementId).collect());
         state.selection = ids.unwrap_or_default();
     }
-}
-
-/// The curves of the detail lines of `view` passing near `p` (where a
-/// tangent arc starts), a few at most.
-fn lines_near(state: &AppState, view: ViewId, p: DVec2, scale: f64) -> Vec<SketchCurve> {
-    let r = PICK_PX / scale.max(1e-9);
-    state
-        .project()
-        .elements
-        .values()
-        .filter_map(|e| match &e.kind {
-            ElementKind::DetailLine(l) if l.view == view && near(l, p, r) => Some(l.curve.clone()),
-            _ => None,
-        })
-        .take(MAX_KEPT)
-        .collect()
 }
 
 /// The Detail Line tool takes typed values now: it has the first point of
@@ -200,9 +236,7 @@ pub fn escape(state: &mut AppState) -> bool {
         }
         // A spline ends where it is, as a chain of lines does.
         Some(d) if d.session.draw == Draw::Spline && d.session.picks.len() >= 2 => {
-            let before = d.session.curves.len();
-            sketch_mode::finish_spline(&mut d.session, false);
-            let new = d.session.curves.get(before..).map(<[SketchCurve]>::to_vec).unwrap_or_default();
+            let new = finish_spline(&mut d.session);
             let view = d.view;
             if !new.is_empty() {
                 let style = state.detail.style;
@@ -393,7 +427,7 @@ pub fn options(ui: &mut Ui, state: &mut AppState) {
         }
         Draw::Polygon | Draw::PolygonOut => {
             ui.label(t!("sketch-sides"));
-            ui.add(egui::DragValue::new(&mut o.sides).range(3..=64));
+            ui.add(egui::DragValue::new(&mut o.sides).range(sketch_mode::MIN_SIDES..=sketch_mode::MAX_SIDES));
             ui.separator();
         }
         _ => {}

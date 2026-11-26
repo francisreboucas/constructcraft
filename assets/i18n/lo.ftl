@@ -2792,7 +2792,7 @@ detail-mode-arc3 = ເສັ້ນໂຄ້ງ 3 ຈຸດ
 detail-mode-circle = ວົງມົນ
 detail-mode-ellipse = ວົງຣີ
 detail-mode-spline = ເສັ້ນໂຄ້ງ Spline
-hint-detail-line = ຄລິກຈຸດຂອງເສັ້ນ (ວົງມົນ: ຈຸດສູນກາງ ແລະ ລັດສະໝີ; ສີ່ຫຼ່ຽມ: ສອງມຸມ); Esc ຍົກເລີກເສັ້ນ
+hint-detail-line = ເລືອກຮູບຮ່າງໃນກຸ່ມ ແຕ້ມ ແລ້ວຄລິກຈຸດຂອງມັນ; Esc ສິ້ນສຸດ spline ຫຼື ຍົກເລີກເສັ້ນ
 
 # Line styles, filled and masking regions
 tx-line-style-create = ສ້າງຮູບແບບເສັ້ນ

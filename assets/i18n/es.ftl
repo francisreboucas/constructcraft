@@ -2790,7 +2790,7 @@ detail-mode-arc3 = Arco por 3 puntos
 detail-mode-circle = Círculo
 detail-mode-ellipse = Elipse
 detail-mode-spline = Spline
-hint-detail-line = Haga clic en los puntos de la curva (círculo: centro y radio; rectángulo: dos esquinas); Esc descarta la curva
+hint-detail-line = Elija la forma en el grupo Dibujar y haga clic en sus puntos; Esc termina una spline o descarta la curva
 
 # Line styles, filled and masking regions
 tx-line-style-create = Crear estilo de línea

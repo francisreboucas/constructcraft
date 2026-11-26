@@ -2790,7 +2790,7 @@ detail-mode-arc3 = 3-point arc
 detail-mode-circle = Circle
 detail-mode-ellipse = Ellipse
 detail-mode-spline = Spline
-hint-detail-line = Click the curve's points (a circle: center and radius; a rectangle: two corners); Esc drops the curve
+hint-detail-line = Pick a shape in the Draw group and click its points; Esc ends a spline or drops the curve
 
 # Line styles, filled and masking regions
 tx-line-style-create = Create line style

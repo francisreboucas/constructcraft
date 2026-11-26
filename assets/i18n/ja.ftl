@@ -2790,7 +2790,7 @@ detail-mode-arc3 = 3 点円弧
 detail-mode-circle = 円
 detail-mode-ellipse = 楕円
 detail-mode-spline = スプライン
-hint-detail-line = 曲線の点をクリック（円: 中心と半径、長方形: 2 つの角）。Esc で曲線を破棄
+hint-detail-line = 「描画」グループで形状を選び、その点をクリック。Esc でスプラインを終了、または曲線を破棄
 
 # Line styles, filled and masking regions
 tx-line-style-create = 線種を作成

@@ -2790,7 +2790,7 @@ detail-mode-arc3 = Łuk przez 3 punkty
 detail-mode-circle = Okrąg
 detail-mode-ellipse = Elipsa
 detail-mode-spline = Splajn
-hint-detail-line = Kliknij punkty krzywej (okrąg: środek i promień; prostokąt: dwa narożniki); Esc porzuca krzywą
+hint-detail-line = Wybierz kształt w grupie Rysuj i kliknij jego punkty; Esc kończy splajn lub porzuca krzywą
 
 # Line styles, filled and masking regions
 tx-line-style-create = Utwórz styl linii

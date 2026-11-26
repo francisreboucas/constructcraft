@@ -2790,7 +2790,7 @@ detail-mode-arc3 = 三點弧
 detail-mode-circle = 圓
 detail-mode-ellipse = 橢圓
 detail-mode-spline = 雲形線
-hint-detail-line = 點選曲線的點（圓：圓心與半徑；矩形：兩個角點）；Esc 放棄曲線
+hint-detail-line = 在「繪製」群組中選擇形狀並點選其點；Esc 結束雲形線或放棄曲線
 
 # Line styles, filled and masking regions
 tx-line-style-create = 建立線條樣式
