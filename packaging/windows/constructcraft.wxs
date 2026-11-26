@@ -103,6 +103,17 @@
       </Feature>
     </Feature>
 
+    <!--
+      Update Now runs `msiexec /i <msi> /passive LAUNCHAPP=1` as the app closes: the installer
+      starts the new version itself when it is done, as the user who started it (an immediate
+      action, never elevated), so the app needs no script to wait for the installer.
+    -->
+    <Property Id="LAUNCHAPP" Secure="yes" />
+    <CustomAction Id="LaunchApp" FileRef="constructcraft.exe" ExeCommand="" Execute="immediate" Return="asyncNoWait" />
+    <InstallExecuteSequence>
+      <Custom Action="LaunchApp" After="InstallFinalize" Condition="LAUNCHAPP = 1 AND NOT REMOVE" />
+    </InstallExecuteSequence>
+
     <ui:WixUI Id="WixUI_FeatureTree" />
     <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
   </Package>

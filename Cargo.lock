@@ -731,6 +731,7 @@ dependencies = [
  "cc_raytracing",
  "cc_render",
  "cc_script",
+ "cc_skp",
  "cc_views",
  "eframe",
  "egui",

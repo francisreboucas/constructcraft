@@ -23,6 +23,7 @@ cc_raytracing.workspace = true
 cc_ifc.workspace = true
 cc_engine.workspace = true
 cc_plugins.workspace = true
+cc_skp.workspace = true
 cc_script.workspace = true
 eframe.workspace = true
 egui.workspace = true
