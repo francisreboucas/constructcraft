@@ -75,7 +75,7 @@ Options:
                          (open, save, import, export); a graph file cannot
                          allow them itself
   --lang <code>          language of default names (default: the system's):
-                         en, pt-BR, es, fr, de, it, lo, pl, uk-UA, zh-TW, zh-CN or ja
+                         en, pt-BR, es, fr, de, it, lo, pl, uk-UA, ru, zh-TW, zh-CN or ja
   -V, --version          the version
   -h, --help             this help
 

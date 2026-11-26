@@ -167,7 +167,7 @@ ccad [options] mcp                  serve the commands over MCP (stdio)
 --plugins <folder>     load the plugin in <folder>, or each plugin in its
                        subfolders (repeatable)
 --lang <code>          language of default names and messages (also CCAD_LANG):
-                       en, pt-BR, es, fr, de, it, lo, pl, uk-UA, zh-TW, zh-CN or ja
+                       en, pt-BR, es, fr, de, it, lo, pl, uk-UA, ru, zh-TW, zh-CN or ja
 ```
 
 Arguments of `run` can be a JSON object, `@file.json`, `-` (standard input) or `key=value` pairs, whose values are read as JSON when they parse and as text otherwise:
@@ -758,7 +758,7 @@ ccad plugins settings ~/plugins quick_rooms default_height=3 default_door=north
 
 Values are written like `run`'s `key=value` arguments (JSON or plain text; a string setting takes the text as it is), checked against the manifest and stored; a value that does not fit is refused and nothing is written. This reads the manifest and the translations only: the plugin's code does not run.
 
-**Translations.** `locales/<code>.toml` files in the plugin's folder, `<code>` one of ConstructCraft's languages (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `lo`, `pl`, `uk-UA`, `zh-TW`, `zh-CN`, `ja`; other files are ignored), hold `key = "text"` lines or tables whose keys join with `.` (each file at most 256 KiB; a file that is not TOML of texts is a load error):
+**Translations.** `locales/<code>.toml` files in the plugin's folder, `<code>` one of ConstructCraft's languages (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `lo`, `pl`, `uk-UA`, `ru`, `zh-TW`, `zh-CN`, `ja`; other files are ignored), hold `key = "text"` lines or tables whose keys join with `.` (each file at most 256 KiB; a file that is not TOML of texts is a load error):
 
 ```toml
 # locales/pt-BR.toml

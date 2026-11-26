@@ -165,7 +165,7 @@ ccad [opções] mcp                  serve os comandos por MCP (stdio)
 --plugins <pasta>         carrega o plugin da <pasta>, ou cada plugin das suas
                           subpastas (pode repetir)
 --lang <código>           idioma dos nomes padrão e mensagens (também CCAD_LANG):
-                          en, pt-BR, es, fr, de, it, lo, pl, uk-UA, zh-TW, zh-CN ou ja
+                          en, pt-BR, es, fr, de, it, lo, pl, uk-UA, ru, zh-TW, zh-CN ou ja
 ```
 
 Os argumentos de `run` podem ser um objeto JSON, `@arquivo.json`, `-` (entrada padrão) ou pares `chave=valor`, cujos valores são lidos como JSON quando possível e como texto caso contrário:
@@ -757,7 +757,7 @@ ccad plugins settings ~/plugins quick_rooms default_height=3 default_door=north
 
 Os valores se escrevem como os argumentos `key=value` do `run` (JSON ou texto simples; uma configuração de texto recebe o texto como está), são conferidos com o manifesto e guardados; um valor que não cabe é recusado e nada é gravado. Isso lê só o manifesto e as traduções: o código do plugin não roda.
 
-**Traduções.** Arquivos `locales/<código>.toml` na pasta do plugin, `<código>` um dos idiomas do ConstructCraft (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `lo`, `pl`, `uk-UA`, `zh-TW`, `zh-CN`, `ja`; outros arquivos são ignorados), têm linhas `chave = "texto"` ou tabelas cujas chaves se juntam com `.` (cada arquivo com no máximo 256 KiB; um arquivo que não é TOML de textos é um erro de carregamento):
+**Traduções.** Arquivos `locales/<código>.toml` na pasta do plugin, `<código>` um dos idiomas do ConstructCraft (`en`, `pt-BR`, `es`, `fr`, `de`, `it`, `lo`, `pl`, `uk-UA`, `ru`, `zh-TW`, `zh-CN`, `ja`; outros arquivos são ignorados), têm linhas `chave = "texto"` ou tabelas cujas chaves se juntam com `.` (cada arquivo com no máximo 256 KiB; um arquivo que não é TOML de textos é um erro de carregamento):
 
 ```toml
 # locales/pt-BR.toml

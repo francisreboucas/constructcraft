@@ -13,6 +13,7 @@
       "name": "Ipê",
       "names": {
         "lo": "ໄມ້ Ipê",
+        "ru": "Ипе",
         "zh-TW": "Ipê 木",
         "zh-CN": "Ipê 木",
         "ja": "Ipê 材"
@@ -32,6 +33,7 @@
       "name": "Cumaru",
       "names": {
         "lo": "ໄມ້ Cumaru",
+        "ru": "Кумару",
         "zh-TW": "Cumaru 木",
         "zh-CN": "Cumaru 木",
         "ja": "Cumaru 材"
@@ -51,6 +53,7 @@
       "name": "Jatobá",
       "names": {
         "lo": "ໄມ້ Jatobá",
+        "ru": "Ятоба",
         "zh-TW": "Jatobá 木",
         "zh-CN": "Jatobá 木",
         "ja": "Jatobá 材"
@@ -70,6 +73,7 @@
       "name": "Itaúba",
       "names": {
         "lo": "ໄມ້ Itaúba",
+        "ru": "Итауба",
         "zh-TW": "Itaúba 木",
         "zh-CN": "Itaúba 木",
         "ja": "Itaúba 材"
@@ -89,6 +93,7 @@
       "name": "Garapeira",
       "names": {
         "lo": "ໄມ້ Garapeira",
+        "ru": "Гарапейра",
         "zh-TW": "Garapeira 木",
         "zh-CN": "Garapeira 木",
         "ja": "Garapeira 材"
@@ -108,6 +113,7 @@
       "name": "Peroba-rosa",
       "names": {
         "lo": "ໄມ້ Peroba-rosa",
+        "ru": "Пероба-роза",
         "zh-TW": "Peroba-rosa 木",
         "zh-CN": "Peroba-rosa 木",
         "ja": "Peroba-rosa 材"
@@ -132,6 +138,7 @@
         "lo": "ໄມ້ຢູຄາລິບ citriodora",
         "pl": "Eukaliptus citriodora",
         "uk-UA": "Евкаліпт citriodora",
+        "ru": "Эвкалипт лимонный (citriodora)",
         "zh-TW": "檸檬桉木",
         "zh-CN": "柠檬桉木",
         "ja": "レモンユーカリ材"
@@ -156,6 +163,7 @@
         "lo": "ໄມ້ຢູຄາລິບ grandis",
         "pl": "Eukaliptus grandis",
         "uk-UA": "Евкаліпт grandis",
+        "ru": "Эвкалипт grandis",
         "zh-TW": "巨桉木",
         "zh-CN": "巨桉木",
         "ja": "グランディスユーカリ材"
@@ -175,6 +183,7 @@
       "name": "Cambará",
       "names": {
         "lo": "ໄມ້ Cambará",
+        "ru": "Камбара",
         "zh-TW": "Cambará 木",
         "zh-CN": "Cambará 木",
         "ja": "Cambará 材"
@@ -194,6 +203,7 @@
       "name": "Freijó",
       "names": {
         "lo": "ໄມ້ Freijó",
+        "ru": "Фрейжо",
         "zh-TW": "Freijó 木",
         "zh-CN": "Freijó 木",
         "ja": "Freijó 材"
@@ -213,6 +223,7 @@
       "name": "Cedro-rosa",
       "names": {
         "lo": "ໄມ້ Cedro-rosa",
+        "ru": "Седру-роза",
         "zh-TW": "Cedro-rosa 木",
         "zh-CN": "Cedro-rosa 木",
         "ja": "Cedro-rosa 材"
@@ -239,6 +250,7 @@
         "lo": "ໄມ້ແປກ",
         "pl": "Sosna",
         "uk-UA": "Сосна",
+        "ru": "Сосна",
         "zh-TW": "松木",
         "zh-CN": "松木",
         "ja": "パイン材"

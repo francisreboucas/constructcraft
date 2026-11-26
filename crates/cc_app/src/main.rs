@@ -190,7 +190,7 @@ fn app_icon() -> egui::IconData {
     eframe::icon_data::from_png_bytes(theme::APP_ICON_PNG).unwrap_or_default()
 }
 
-/// `constructcraft [project.ccad] [--view NAME]... [--graph FILE.ccgraph] [--lang en|pt-BR|es|fr|de|it|lo|pl|uk-UA|zh-TW|zh-CN|ja]`
+/// `constructcraft [project.ccad] [--view NAME]... [--graph FILE.ccgraph] [--lang en|pt-BR|es|fr|de|it|lo|pl|uk-UA|ru|zh-TW|zh-CN|ja]`
 ///
 /// Named views replace the default layout (the first floor plan beside the
 /// 3D view): the first on the left, the second on the right, others as tabs.

@@ -17,13 +17,14 @@ pub enum Language {
     Lo,
     Pl,
     Uk,
+    Ru,
     ZhTw,
     ZhCn,
     Ja,
 }
 
 impl Language {
-    pub const ALL: [Language; 12] = [
+    pub const ALL: [Language; 13] = [
         Language::PtBr,
         Language::En,
         Language::Es,
@@ -33,6 +34,7 @@ impl Language {
         Language::Lo,
         Language::Pl,
         Language::Uk,
+        Language::Ru,
         Language::ZhTw,
         Language::ZhCn,
         Language::Ja,
@@ -50,6 +52,7 @@ impl Language {
             Language::Lo => "lo",
             Language::Pl => "pl",
             Language::Uk => "uk-UA",
+            Language::Ru => "ru",
             Language::ZhTw => "zh-TW",
             Language::ZhCn => "zh-CN",
             Language::Ja => "ja",
@@ -68,6 +71,7 @@ impl Language {
             Language::Lo => "ພາສາລາວ",
             Language::Pl => "Polski",
             Language::Uk => "Українська",
+            Language::Ru => "Русский",
             Language::ZhTw => "繁體中文",
             Language::ZhCn => "简体中文",
             Language::Ja => "日本語",
@@ -100,6 +104,7 @@ impl Language {
             "lo" => Language::Lo,
             "pl" => Language::Pl,
             "uk" => Language::Uk,
+            "ru" => Language::Ru,
             "zh" if traditional => Language::ZhTw,
             "zh" => Language::ZhCn,
             "ja" => Language::Ja,
@@ -125,6 +130,7 @@ impl Language {
             Language::Lo => include_str!("../../../assets/i18n/lo.ftl"),
             Language::Pl => include_str!("../../../assets/i18n/pl.ftl"),
             Language::Uk => include_str!("../../../assets/i18n/uk-UA.ftl"),
+            Language::Ru => include_str!("../../../assets/i18n/ru.ftl"),
             Language::ZhTw => include_str!("../../../assets/i18n/zh-TW.ftl"),
             Language::ZhCn => include_str!("../../../assets/i18n/zh-CN.ftl"),
             Language::Ja => include_str!("../../../assets/i18n/ja.ftl"),
@@ -192,7 +198,7 @@ pub fn tr_args(key: &str, args: &[(&str, String)]) -> String {
 pub fn format_date(y: i32, m: u32, d: u32) -> String {
     match language() {
         Language::En | Language::Ja | Language::ZhCn | Language::ZhTw => format!("{y:04}-{m:02}-{d:02}"),
-        Language::De | Language::Pl | Language::Uk => format!("{d:02}.{m:02}.{y:04}"),
+        Language::De | Language::Pl | Language::Uk | Language::Ru => format!("{d:02}.{m:02}.{y:04}"),
         Language::PtBr | Language::Es | Language::Fr | Language::It | Language::Lo => {
             format!("{d:02}/{m:02}/{y:04}")
         }
@@ -262,6 +268,8 @@ mod tests {
         assert_eq!(Language::from_code("lo-LA"), Some(Language::Lo));
         assert_eq!(Language::from_code("pl-PL"), Some(Language::Pl));
         assert_eq!(Language::from_code("uk-UA"), Some(Language::Uk));
+        assert_eq!(Language::from_code("ru"), Some(Language::Ru));
+        assert_eq!(Language::from_code("ru_RU"), Some(Language::Ru));
         assert_eq!(Language::from_code("zh-TW"), Some(Language::ZhTw));
         assert_eq!(Language::from_code("zh_HK"), Some(Language::ZhTw));
         assert_eq!(Language::from_code("zh-Hant-TW"), Some(Language::ZhTw));
