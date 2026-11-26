@@ -147,6 +147,10 @@ pub enum SheetSize {
 /// Millimeters in an inch, for paper sizes.
 const PAPER_INCH: f64 = 25.4;
 
+fn yes() -> bool {
+    true
+}
+
 impl SheetSize {
     /// Every named size: the ISO A sizes, then ANSI, then architectural.
     pub const ALL: [SheetSize; 16] = [
@@ -331,6 +335,24 @@ pub enum ViewKind {
     },
     Elevation {
         direction: Direction,
+    },
+    /// The wall on `side` of an interior elevation marker (see
+    /// [`crate::interior`]), seen from the marker. `origin` and `look` are
+    /// copied from the marker by every edit; the depth and the crop come
+    /// from the space around it when the view is drawn.
+    InteriorElevation {
+        marker: crate::ElementId,
+        side: crate::interior::Side,
+        /// The number in the view's name, among its marker's views.
+        number: u32,
+        /// Where the view looks from (the marker's position).
+        origin: DVec2,
+        /// The unit direction it looks along.
+        look: DVec2,
+        /// Crop to the space around the marker; off, the view keeps the
+        /// crop drawn on it ([`View::crop`]).
+        #[serde(default = "yes")]
+        auto_extents: bool,
     },
     /// Section line from `start` to `end`; looks to the right of the line.
     Section {
@@ -741,6 +763,7 @@ impl ViewKind {
                 | ViewKind::CeilingPlan { .. }
                 | ViewKind::ThreeD { .. }
                 | ViewKind::Elevation { .. }
+                | ViewKind::InteriorElevation { .. }
                 | ViewKind::Section { .. }
                 | ViewKind::Schedule { .. }
         )
@@ -755,6 +778,7 @@ impl ViewKind {
                 | ViewKind::CeilingPlan { .. }
                 | ViewKind::ThreeD { .. }
                 | ViewKind::Elevation { .. }
+                | ViewKind::InteriorElevation { .. }
                 | ViewKind::Section { .. }
         )
     }
@@ -762,7 +786,13 @@ impl ViewKind {
     /// Whether views of this kind can show the reinforcement ([`View::rebar`]):
     /// floor plans, elevations and sections.
     pub fn takes_rebar(&self) -> bool {
-        matches!(self, ViewKind::FloorPlan { .. } | ViewKind::Elevation { .. } | ViewKind::Section { .. })
+        matches!(
+            self,
+            ViewKind::FloorPlan { .. }
+                | ViewKind::Elevation { .. }
+                | ViewKind::InteriorElevation { .. }
+                | ViewKind::Section { .. }
+        )
     }
 
     /// Whether views of this kind can have render settings ([`View::render`]):
@@ -892,7 +922,7 @@ impl View {
             ViewKind::FloorPlan { .. } => ViewCategory::FloorPlan,
             ViewKind::CeilingPlan { .. } => ViewCategory::CeilingPlan,
             ViewKind::ThreeD { .. } => ViewCategory::ThreeD,
-            ViewKind::Elevation { .. } => ViewCategory::Elevation,
+            ViewKind::Elevation { .. } | ViewKind::InteriorElevation { .. } => ViewCategory::Elevation,
             ViewKind::Section { .. } => ViewCategory::Section,
             ViewKind::Legend { .. } => ViewCategory::Legend,
             ViewKind::Drafting { .. } => ViewCategory::Drafting,

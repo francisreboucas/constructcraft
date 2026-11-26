@@ -55,6 +55,7 @@ pub fn category_icon(category: Category) -> Icon {
         Category::MaskingRegion => Icon::MaskingRegion,
         Category::Mass => Icon::Mass,
         Category::Shaft => Icon::Shaft,
+        Category::InteriorMarker => Icon::Elevation,
         Category::SteelBuilding => Icon::SteelBuilding,
         Category::Truss => Icon::Truss,
         Category::Bracing => Icon::Brace,
@@ -71,6 +72,7 @@ fn tool_icon(tool: &Tool) -> Icon {
         Tool::Select => Icon::Select,
         Tool::Section => Icon::Section,
         Tool::Callout => Icon::Callout,
+        Tool::InteriorElevation => Icon::Elevation,
         Tool::Move => Icon::Move,
         Tool::Copy => Icon::Copy,
         Tool::Rotate => Icon::Rotate,
@@ -1580,7 +1582,11 @@ fn view_tab(ui: &mut Ui, state: &mut AppState) {
                 }
             });
         }
-        command_buttons(ui, state, &[UiCommand::New3D, UiCommand::Section, UiCommand::Callout]);
+        command_buttons(
+            ui,
+            state,
+            &[UiCommand::New3D, UiCommand::Section, UiCommand::Callout, UiCommand::InteriorElevation],
+        );
         let r = command_menu(ui, state, UiCommand::Elevations);
         egui::Popup::menu(&r).show(|ui| {
             let elevations: Vec<_> =
@@ -2078,6 +2084,7 @@ pub fn options_bar(ui: &mut Ui, state: &mut AppState) {
                 ui.label(theme::muted(t!("msg-section-hint")));
             }
             Tool::Callout => crate::callout_ui::options(ui, state),
+            Tool::InteriorElevation => crate::interior_ui::options(ui, state),
             Tool::Opening { host, floor } => {
                 let n = state.interaction.points.len();
                 if ui.add_enabled(n >= 3, Button::new(t!("sketch-finish"))).clicked() {

@@ -367,6 +367,8 @@ fn ribbon_buttons_are_accessible() {
             .map(|c| vec![first(c)])
             .to_vec();
     picks.push(vec![first(cc_core::Category::Component)]);
+    // A room: its interior elevations.
+    picks.push(vec![first(cc_core::Category::Room)]);
     picks.push(vec![cc_core::ElementId(sweep), cc_core::ElementId(text)]);
     let sheet = project.sheets_in_order()[0];
     for pick in picks {
@@ -9051,4 +9053,146 @@ fn a_sketch_opens_its_contextual_modify_tab() {
     harness.run();
     assert!(harness.state().sketch.is_none());
     assert_eq!(harness.state().ribbon_tab, RibbonTab::Architecture, "the tab before comes back");
+}
+
+/// A room of the sample project on its first level, and the plan of that level.
+fn interior_state() -> (AppState, cc_core::ElementId, glam::DVec2) {
+    let mut state = sample_state();
+    let level = state.project().levels[0].id;
+    let plan = state.project().views.values().find(|v| v.is_plan() && v.level() == Some(level)).unwrap().id;
+    state.active_view = Some(plan);
+    let rooms: Vec<(cc_core::ElementId, glam::DVec2)> = state
+        .project()
+        .elements
+        .values()
+        .filter(|e| e.level == level)
+        .filter_map(|e| match &e.kind {
+            cc_core::ElementKind::Room(r) => Some((e.id, r.position)),
+            _ => None,
+        })
+        .collect();
+    let (room, at) = rooms.into_iter().find(|(id, _)| state.session.geom().rooms.contains_key(id)).unwrap();
+    (state, room, at)
+}
+
+/// The active plan's canvas centered on `origin`, 100 points per meter, with the app's keys.
+fn interior_canvas(state: AppState, origin: glam::DVec2) -> Harness<'static, AppState> {
+    themed_harness(state, egui::vec2(600.0, 400.0), egui::Theme::Light, move |ui, state| {
+        crate::app::shortcuts(ui.ctx(), state);
+        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        let xf = crate::paint::Xf { screen: resp.rect.center(), origin, scale: 100.0 };
+        let Some(view) = state.active_view.and_then(|v| state.project().view(v).cloned()) else { return };
+        let Some(drawing) = state.drawing(view.id) else { return };
+        crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
+    })
+}
+
+fn interior_click(h: &mut Harness<'static, AppState>, at: egui::Pos2, times: usize) {
+    h.input_mut().events.push(egui::Event::PointerMoved(at));
+    h.run();
+    for _ in 0..times {
+        for pressed in [true, false] {
+            let (button, modifiers) = (egui::PointerButton::Primary, egui::Modifiers::NONE);
+            h.input_mut().events.push(egui::Event::PointerButton { pos: at, button, pressed, modifiers });
+            h.run();
+        }
+    }
+}
+
+/// Issue #477: the Interior Elevation tool (View tab) places a marker with
+/// its four views in the space clicked, and a double click on an arrow of
+/// the marker opens that arrow's view.
+#[test]
+fn the_interior_elevation_tool_places_a_marker_and_its_arrows_open_views() {
+    let (mut state, _, at) = interior_state();
+    state.ribbon_tab = RibbonTab::View;
+    let mut ribbon = ribbon_harness(state, 2400.0);
+    ribbon.get_by_role_and_label(Role::Button, &t!("tool-interior-elevation")).click();
+    ribbon.run();
+    assert_eq!(ribbon.state().tool, crate::tools::Tool::InteriorElevation);
+    let state = std::mem::replace(ribbon.state_mut(), sample_state());
+
+    let mut canvas = interior_canvas(state, at);
+    interior_click(&mut canvas, egui::pos2(300.0, 200.0), 1);
+    let state = canvas.state();
+    let markers: Vec<cc_core::ElementId> = state
+        .project()
+        .elements
+        .values()
+        .filter(|e| matches!(e.kind, cc_core::ElementKind::InteriorMarker(_)))
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(markers.len(), 1, "{}", state.message);
+    assert_eq!(state.project().marker_sides(markers[0]).len(), 4);
+    assert_eq!(state.selection, [markers[0]].into_iter().collect(), "the marker is selected");
+
+    // With the Select tool, a double click on the east arrow opens the east view.
+    let plan = state.active_view.unwrap();
+    let east = state
+        .project()
+        .marker_sides(markers[0])
+        .into_iter()
+        .find(|(side, ..)| *side == cc_core::interior::Side::East)
+        .unwrap()
+        .2;
+    canvas.state_mut().set_tool(crate::tools::Tool::Select);
+    let arrow =
+        canvas.state_mut().drawing(plan).unwrap().interior_arrows.iter().find(|a| a.view == east).copied().unwrap();
+    let xf = crate::paint::Xf { screen: egui::pos2(300.0, 200.0), origin: at, scale: 100.0 };
+    // The harness clock runs faster than a hand, so allow a slow double click.
+    canvas.ctx.options_mut(|o| o.input_options.max_double_click_delay = 60.0);
+    interior_click(&mut canvas, xf.to_screen(arrow.center), 2);
+    assert_eq!(canvas.state().open_requests.last(), Some(&east), "the east view opens");
+}
+
+/// The marker's properties take a side away (its view goes) and back (a
+/// view with the freed number); the last side cannot be taken away; a
+/// selected room's command makes its four views.
+#[test]
+fn interior_markers_set_their_sides_in_properties() {
+    let (mut state, room, _) = interior_state();
+    state.selection = [room].into_iter().collect();
+    assert!(crate::commands::UiCommand::RoomInteriorElevations.unavailable(&state).is_none());
+    crate::interior_ui::for_selected_rooms(&mut state);
+    let marker = *state.selection.iter().next().unwrap();
+    assert_eq!(state.project().marker_sides(marker).len(), 4, "{}", state.message);
+
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    let north = t!("tpl-elev-north");
+    harness.get_by_role_and_label(Role::CheckBox, &north).click();
+    harness.run();
+    let sides = harness.state().project().marker_sides(marker);
+    assert_eq!(sides.len(), 3, "{}", harness.state().message);
+    assert!(sides.iter().all(|(s, ..)| *s != cc_core::interior::Side::North));
+    harness.get_by_role_and_label(Role::CheckBox, &north).click();
+    harness.run();
+    let sides = harness.state().project().marker_sides(marker);
+    let (_, number, _) = sides.iter().find(|(s, ..)| *s == cc_core::interior::Side::North).unwrap();
+    assert_eq!(*number, 1, "the freed number comes back");
+}
+
+/// Turning *Automatic extents* off keeps the crop the view had, which then
+/// stays as drawn.
+#[test]
+fn interior_elevations_can_keep_their_crop() {
+    let (mut state, room, _) = interior_state();
+    state.selection = [room].into_iter().collect();
+    crate::interior_ui::for_selected_rooms(&mut state);
+    let marker = *state.selection.iter().next().unwrap();
+    let view = state.project().marker_sides(marker)[0].2;
+    state.selection.clear();
+    state.active_view = Some(view);
+    let mut harness = themed_harness(state, egui::vec2(360.0, 1600.0), egui::Theme::Light, |ui, state| {
+        crate::properties::show(ui, state);
+    });
+    harness.run();
+    assert!(harness.state().project().view(view).unwrap().crop.is_none());
+    harness.get_by_role_and_label(Role::CheckBox, &t!("prop-auto-extents")).click();
+    harness.run();
+    let v = harness.state().project().view(view).unwrap().clone();
+    assert!(matches!(v.kind, cc_core::ViewKind::InteriorElevation { auto_extents: false, .. }), "{:?}", v.kind);
+    assert!(v.crop.is_some_and(|c| c.is_valid()), "the crop it had is kept: {:?}", v.crop);
 }

@@ -87,6 +87,7 @@ impl ViewKind {
                 | ViewKind::CeilingPlan { .. }
                 | ViewKind::Section { .. }
                 | ViewKind::Elevation { .. }
+                | ViewKind::InteriorElevation { .. }
         )
     }
 }
@@ -142,6 +143,13 @@ impl Project {
         match (&mut kind, &parent.kind) {
             (ViewKind::Section { .. }, ViewKind::Section { .. })
             | (ViewKind::Elevation { .. }, ViewKind::Elevation { .. }) => kind = parent.kind.clone(),
+            // A detail of an interior elevation keeps its own crop.
+            (ViewKind::InteriorElevation { .. }, ViewKind::InteriorElevation { .. }) => {
+                kind = parent.kind.clone();
+                if let ViewKind::InteriorElevation { auto_extents, .. } = &mut kind {
+                    *auto_extents = false;
+                }
+            }
             (ViewKind::FloorPlan { level, .. }, ViewKind::FloorPlan { level: l, .. })
             | (ViewKind::CeilingPlan { level, .. }, ViewKind::CeilingPlan { level: l, .. }) => *level = *l,
             _ => return None,

@@ -250,6 +250,9 @@ pub(crate) fn plan_drawing(
             }
         }
     }
+    if !ceiling {
+        crate::interior::marks(&mut d, project, level, scale);
+    }
     d
 }
 

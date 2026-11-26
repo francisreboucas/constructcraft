@@ -244,12 +244,24 @@ pub struct Drawing2D {
     pub marks: Vec<MarkHandle>,
     /// The bubbles of grids: picked and moved in the view.
     pub bubbles: Vec<BubbleHandle>,
+    /// The arrows of interior elevation markers in a plan: a double click
+    /// opens the arrow's view.
+    pub interior_arrows: Vec<InteriorArrow>,
     /// The levels of an elevation or a section: picked, and their heads
     /// moved, in the view.
     pub levels: Vec<LevelHandle>,
     /// Lookups over `prims`, built the first time they are needed (see
     /// [`DrawingIndex`]); a copy of the drawing starts without them.
     pub index: DrawingIndex,
+}
+
+/// An arrow of an interior elevation marker, as drawn: picked within
+/// `radius` of `center`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InteriorArrow {
+    pub view: cc_core::ViewId,
+    pub center: DVec2,
+    pub radius: f64,
 }
 
 /// The label of a fitting, as drawn: its key in the view's
@@ -427,6 +439,11 @@ impl Drawing2D {
     /// The callout mark at `p` (the last drawn on top), if any.
     pub fn callout_at(&self, p: DVec2, tol: f64) -> Option<&crate::callout::CalloutHandle> {
         self.callouts.iter().rev().find(|c| c.hits(p, tol))
+    }
+
+    /// The view of the interior elevation arrow at `p` (within `tol`), if any.
+    pub fn interior_arrow_at(&self, p: DVec2, tol: f64) -> Option<cc_core::ViewId> {
+        self.interior_arrows.iter().rev().find(|a| a.center.distance(p) <= a.radius + tol).map(|a| a.view)
     }
 
     /// The tag at `p` (the last drawn on top), if any.

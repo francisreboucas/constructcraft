@@ -150,7 +150,9 @@ impl<'a> Look<'a> {
             let bottom = geom.bounds().map(|(lo, _)| lo.z);
             let catch = match (&view.kind, indoors) {
                 (cc_core::ViewKind::FloorPlan { .. }, Some(indoors)) => Catch::Site(indoors),
-                (cc_core::ViewKind::Section { .. }, Some(indoors)) => Catch::Outdoors(indoors),
+                (cc_core::ViewKind::Section { .. } | cc_core::ViewKind::InteriorElevation { .. }, Some(indoors)) => {
+                    Catch::Outdoors(indoors)
+                }
                 _ => Catch::All,
             };
             Shadows { ground: Some(project.sun_ground_height(view, bottom)), skip, catch }
@@ -865,6 +867,7 @@ pub fn view_frame(view: &cc_core::View) -> Option<Frame> {
         cc_core::ViewKind::Elevation { direction } => Some(elevation_frame(*direction)),
         cc_core::ViewKind::Section { start, end, depth, .. } => Some(section_frame(*start, *end, *depth)),
         cc_core::ViewKind::ThreeD { camera, .. } => Some(camera_frame(camera)),
+        cc_core::ViewKind::InteriorElevation { .. } => crate::interior::frame(view),
         _ => None,
     }
 }
@@ -882,10 +885,14 @@ pub fn section(
     scale: u32,
     look: Look<'_>,
 ) -> Drawing2D {
-    let frame = section_frame(start, end, depth);
+    section_in(project, geom, &section_frame(start, end, depth), scale, look)
+}
+
+/// A section through `frame` (its near plane cuts; see [`section`]).
+pub fn section_in(project: &Project, geom: &ModelGeometry, frame: &Frame, scale: u32, look: Look<'_>) -> Drawing2D {
     let cut = CutStyle { project, spacing: crate::cut::spacing(scale) };
-    let mut d = render(geom, &frame, Some(cut), look, &project.fill_patterns);
-    existing_ground(&mut d, geom, &frame);
+    let mut d = render(geom, frame, Some(cut), look, &project.fill_patterns);
+    existing_ground(&mut d, geom, frame);
     d
 }
 

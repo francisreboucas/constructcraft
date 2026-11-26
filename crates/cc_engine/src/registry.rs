@@ -308,6 +308,8 @@ registry![
         sweep::SweepTypeCreate,
         sweep::SweepProfileSet,
         shaft::ShaftCreate,
+        interior::InteriorElevationsCreate,
+        interior::InteriorElevationSidesSet,
         shaft::ShaftTypeCreate,
         topography::TopographyCreate,
         topography::TopographyPointsSet,

@@ -22,6 +22,7 @@ pub mod fonts;
 pub mod format;
 pub mod graphics;
 pub mod hatch;
+pub mod interior;
 mod joins;
 mod legend;
 pub mod level_heads;
@@ -48,8 +49,8 @@ pub use annotate::{
 };
 pub use component_view::{ComponentView, ComponentViewKind, ViewConnector, ViewDimension, component_view};
 pub use drawing::{
-    Anchor, BubbleHandle, Drawing2D, FittingTagHandle, LevelHandle, LevelHeadHandle, LineStyle, MAX_HITS, MarkHandle,
-    Pen, Prim, ResolvedPen, SectionHandle, TagHandle, halftone,
+    Anchor, BubbleHandle, Drawing2D, FittingTagHandle, InteriorArrow, LevelHandle, LevelHeadHandle, LineStyle,
+    MAX_HITS, MarkHandle, Pen, Prim, ResolvedPen, SectionHandle, TagHandle, halftone,
 };
 pub use drawing_index::DrawingIndex;
 pub use legend::legend;
@@ -95,9 +96,16 @@ pub fn generate_temporary(
     // What is indoors of a floor plan's or a section's faces catches none of them.
     let indoors = skip
         .as_ref()
-        .filter(|_| matches!(view.kind, ViewKind::FloorPlan { .. } | ViewKind::Section { .. }))
+        .filter(|_| {
+            matches!(
+                view.kind,
+                ViewKind::FloorPlan { .. } | ViewKind::Section { .. } | ViewKind::InteriorElevation { .. }
+            )
+        })
         .map(|skip| Indoors::of(project, geom, Some(skip), view.detail));
     let look = Look::of(project, geom, view, skip.as_ref(), indoors.as_ref());
+    // The crop of the drawing: the view's own, or an interior elevation's space.
+    let mut crop = view.crop;
     let mut d = match &view.kind {
         ViewKind::FloorPlan { level, cut_height, .. } | ViewKind::CeilingPlan { level, cut_height, .. } => {
             let ceiling = matches!(view.kind, ViewKind::CeilingPlan { .. });
@@ -155,6 +163,19 @@ pub fn generate_temporary(
             }
             d
         }
+        // Nothing to draw while no walls close a space around the marker.
+        ViewKind::InteriorElevation { .. } => match interior::resolve(project, geom, view) {
+            Some(r) => {
+                crop = r.crop;
+                let mut d = projected::section_in(project, geom, &r.frame, view.scale, look);
+                joins::merge(project, &mut d);
+                rebar_view::draw_all(&mut d, project, geom, view);
+                level_heads::draw(&mut d, project, view, &r.frame);
+                annotate::projected_grids(&mut d, project, &r.frame, view.scale, &view.tags);
+                d
+            }
+            None => Drawing2D::default(),
+        },
         ViewKind::Section { start, end, depth, .. } => {
             let mut d = section(project, geom, (*start, *end), *depth, view.scale, look);
             joins::merge(project, &mut d);
@@ -204,7 +225,7 @@ pub fn generate_temporary(
     callout::marks(&mut d, project, view);
     graphics::apply(&mut d, &mut resolver, view.scale);
     underlay(&mut d, project, geom, view);
-    if let Some(rect) = view.crop.filter(|r| r.is_valid() && view.kind.croppable()) {
+    if let Some(rect) = crop.filter(|r| r.is_valid() && view.kind.croppable()) {
         callout::crop(&mut d, project, view.id, rect);
     }
     // The sun path last, over everything: neither cropped nor overridden.
@@ -309,6 +330,7 @@ pub fn hosts_cad(kind: &ViewKind) -> bool {
         ViewKind::FloorPlan { .. }
             | ViewKind::CeilingPlan { .. }
             | ViewKind::Elevation { .. }
+            | ViewKind::InteriorElevation { .. }
             | ViewKind::Section { .. }
             | ViewKind::Legend { .. }
             | ViewKind::Drafting { .. }

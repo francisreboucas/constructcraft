@@ -1095,6 +1095,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         ElementKind::LevelMark(m) => crate::level_mark_ui::props(ui, state, id, m),
         // Placed and changed through bar_tag_create and element_set.
         ElementKind::BarTag(_) => {}
+        ElementKind::InteriorMarker(m) => crate::interior_ui::props(ui, state, id, m),
         ElementKind::CadImport(c) => crate::cad_ui::props(ui, state, id, c),
         ElementKind::DetailLine(l) => crate::detail_ui::props(ui, state, id, l),
         ElementKind::DetailComponent(c) => crate::detail_component_ui::props(ui, state, id, c),
@@ -3517,6 +3518,7 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         | ViewKind::Drafting { .. }
         | ViewKind::Elevation { .. }
         | ViewKind::Diagram { .. } => {}
+        ViewKind::InteriorElevation { .. } => crate::interior_ui::view_rows(ui, state, id),
     }
     // The tag types of plans, the mark type of sections and elevations.
     crate::tag_type_ui::view_rows(ui, state, id);

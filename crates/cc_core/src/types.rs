@@ -37,6 +37,8 @@ pub enum Category {
     Sweep,
     /// Shaft openings through floors, ceilings and roofs.
     Shaft,
+    /// Markers of interior elevations in plans.
+    InteriorMarker,
     /// Parametric steel buildings: hosts of portal frames, purlins and girts.
     SteelBuilding,
     /// Parametric trusses: hosts of chords, diagonals and posts.
@@ -84,7 +86,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 43] = [
+    pub const ALL: [Category; 44] = [
         Category::Wall,
         Category::Door,
         Category::Window,
@@ -122,6 +124,7 @@ impl Category {
         Category::CadImport,
         Category::Mass,
         Category::Shaft,
+        Category::InteriorMarker,
         Category::SteelBuilding,
         Category::Truss,
         Category::Bracing,
@@ -237,6 +240,7 @@ impl Category {
             Category::Railing => "category-railing",
             Category::Sweep => "category-sweep",
             Category::Shaft => "category-shaft",
+            Category::InteriorMarker => "category-interior-marker",
             Category::SteelBuilding => "category-steel-building",
             Category::Truss => "category-truss",
             Category::Bracing => "category-bracing",
@@ -628,6 +632,8 @@ pub enum TypeData {
     },
     /// Shaft openings (no properties of their own).
     Shaft {},
+    /// Interior elevation markers (no properties of their own).
+    InteriorMarker {},
     /// Steel buildings (no properties of their own; types name them).
     SteelBuilding {},
     /// Trusses (no properties of their own; types name them).
@@ -745,6 +751,7 @@ impl TypeData {
             | TypeData::FilledRegion { .. }
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
+            | TypeData::InteriorMarker {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
             | TypeData::Bracing {}
@@ -827,6 +834,7 @@ impl TypeData {
             | TypeData::FilledRegion { .. }
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
+            | TypeData::InteriorMarker {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
             | TypeData::Bracing {}
@@ -1072,6 +1080,7 @@ impl ElementType {
             TypeData::Mass { .. } => Category::Mass,
             TypeData::Sweep { .. } => Category::Sweep,
             TypeData::Shaft {} => Category::Shaft,
+            TypeData::InteriorMarker {} => Category::InteriorMarker,
             TypeData::SteelBuilding {} => Category::SteelBuilding,
             TypeData::Truss {} => Category::Truss,
             TypeData::Bracing {} => Category::Bracing,
@@ -1252,6 +1261,7 @@ impl ElementType {
             | TypeData::FilledRegion { .. }
             | TypeData::MaskingRegion {}
             | TypeData::Shaft {}
+            | TypeData::InteriorMarker {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
             | TypeData::Bracing {}

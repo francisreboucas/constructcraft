@@ -38,6 +38,7 @@ mod grid_frame_ui;
 mod home;
 mod i18n;
 mod icons;
+mod interior_ui;
 mod jobs;
 mod level_head_ui;
 mod level_mark_ui;

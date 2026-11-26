@@ -546,6 +546,7 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
             callouts: Vec::new(),
             marks: Vec::new(),
             bubbles: Vec::new(),
+            interior_arrows: Vec::new(),
             levels: Vec::new(),
             underlay: drawing.underlay,
             overlay: drawing.overlay,

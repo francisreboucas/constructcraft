@@ -31,6 +31,7 @@ pub mod graph_binding;
 pub mod graphics;
 pub mod grid;
 mod ids;
+pub mod interior;
 pub mod layer_extent;
 pub mod level_head;
 pub mod level_mark;

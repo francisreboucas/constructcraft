@@ -40,6 +40,7 @@ mod graph;
 mod graphics;
 mod image;
 mod imperial_text;
+mod interior_elevations;
 mod jobs;
 mod level_heads;
 mod level_heights;

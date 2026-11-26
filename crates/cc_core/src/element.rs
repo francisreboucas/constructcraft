@@ -77,6 +77,8 @@ pub enum ElementKind {
     Sweep(crate::profile_sweep::Sweep),
     /// A vertical opening through floors, ceilings and roofs.
     Shaft(crate::shaft::Shaft),
+    /// A marker of interior elevations in a plan (see [`crate::interior`]).
+    InteriorMarker(crate::interior::InteriorMarker),
     /// A parametric steel building: it owns the columns and beams of its frames.
     SteelBuilding(Box<crate::steel_building::SteelBuilding>),
     /// A parametric truss: it owns the beams and columns of its chords and web.
@@ -139,6 +141,7 @@ impl Element {
             ElementKind::Mass(_) => Category::Mass,
             ElementKind::Sweep(_) => Category::Sweep,
             ElementKind::Shaft(_) => Category::Shaft,
+            ElementKind::InteriorMarker(_) => Category::InteriorMarker,
             ElementKind::SteelBuilding(_) => Category::SteelBuilding,
             ElementKind::Truss(_) => Category::Truss,
             ElementKind::Bracing(_) => Category::Bracing,
@@ -397,6 +400,7 @@ impl Element {
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Sweep(s) => s.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(|p| *p += delta),
+            ElementKind::InteriorMarker(m) => m.position += delta,
             ElementKind::SteelBuilding(b) => b.origin += delta,
             ElementKind::Truss(t) => {
                 t.start += delta;

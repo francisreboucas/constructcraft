@@ -282,6 +282,7 @@ pub fn legend(project: &Project, types: &[ElementTypeId], scale: u32) -> Drawing
             | TypeData::MaskingRegion {}
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
+            | TypeData::InteriorMarker {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
             | TypeData::Bracing {}
