@@ -78,7 +78,7 @@ pub fn panel_diagram(
             d.line(base + at(-0.6, -1.0), base + at(0.6, 1.0), LineStyle::Thin, id);
         }
         d.text_at(at(x + 12.5, y + 2.0), format!("{} A", format::number(c.breaker, 0)), 2.0, Anchor::CenterBottom, 0.0);
-        let section = format!("{} mm²", format::number(c.conductor, 1));
+        let section = format!("{} {}", format::number(c.conductor, 1), format::unit_symbol("mm²"));
         d.text_at(at(x + 33.0, y + 1.0), section, 2.0, Anchor::LeftBottom, 0.0);
         let code = system.map_or(String::new(), |s| s.code.clone());
         let title = system.map_or(String::new(), |s| s.name.clone());

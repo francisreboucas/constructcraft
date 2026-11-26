@@ -246,7 +246,7 @@ pub fn sizing(ctx: &Context, state: &mut AppState) {
                     ui.label(format!("{} VA", n(&c["power_va"], 0)));
                     ui.label(format!("{} A", n(&c["current_a"], 1)));
                     ui.label(format!("{} A", n(&c["breaker_a"], 0)));
-                    ui.label(format!("{} mm²", n(&c["conductor_mm2"], 1)));
+                    ui.label(format!("{} {}", n(&c["conductor_mm2"], 1), cc_views::format::unit_symbol("mm²")));
                     ui.label(if c["length_m"].is_null() {
                         "–".into()
                     } else {

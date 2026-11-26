@@ -17,4 +17,4 @@
 | [`cc_rvt`](cc_rvt.md) | 2 | 9 | 1 | Revit project files (.rvt), read by the crates.io `rvt` crate (rvt-rs, Apache-2.0, pure Rust, `forbid(unsafe_code)`) and written as IFC4 text, which `cc_ifc` imports as it imports any IFC file. |
 | [`cc_script`](cc_script.md) | 5 | 23 | 9 | ConstructCraft's sandboxed Lua 5.4. |
 | [`cc_skp`](cc_skp.md) | 35 | 322 | 155 | SketchUp (.skp) files: reader (current and legacy formats, scenes and per-definition instanced scenes) and writer (`create`, `edit`). |
-| [`cc_views`](cc_views.md) | 34 | 273 | 73 | View generation for ConstructCraft. |
+| [`cc_views`](cc_views.md) | 34 | 276 | 73 | View generation for ConstructCraft. |

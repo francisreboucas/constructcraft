@@ -10,6 +10,7 @@ use crate::t;
 use crate::theme::{self, PALETTE};
 use cc_core::units::{FOOT, INCH};
 use cc_core::{AreaUnit, MeasurementSystem, SheetSize, Units, VolumeUnit};
+use cc_views::format;
 use egui::{Context, Sense, Stroke, StrokeKind, Ui, vec2};
 use std::sync::Arc;
 
@@ -42,15 +43,15 @@ fn details(system: MeasurementSystem) -> [String; 3] {
         MeasurementSystem::Metric => [
             t!(
                 "new-project-metric-units",
-                "area" => AreaUnit::SquareMeter.symbol(),
-                "volume" => VolumeUnit::CubicMeter.symbol()
+                "area" => format::unit_symbol(AreaUnit::SquareMeter.symbol()),
+                "volume" => format::unit_symbol(VolumeUnit::CubicMeter.symbol())
             ),
             t!("new-project-scales", "scales" => "1:50, 1:100"),
             t!("new-project-metric-sheets", "size" => SheetSize::A3.label()),
         ],
         MeasurementSystem::Imperial => {
             let units = Units::imperial();
-            let length = |meters| cc_views::format::length_with(&units, false, meters);
+            let length = |meters| format::length_with(&units, false, meters);
             [
                 t!("new-project-imperial-units", "sample" => length(12.0 * FOOT + 6.5 * INCH)),
                 t!("new-project-scales", "scales" => cc_core::scale::label(MeasurementSystem::Imperial, 48)),

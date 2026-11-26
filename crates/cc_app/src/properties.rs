@@ -1393,7 +1393,7 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
         .custom_formatter(move |v, _| format::length_number_with(&units, comma, v))
         .custom_parser(move |s| format::parse_length_with(&parse_units, s));
     // Feet and inches carry their own marks.
-    if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", unit.symbol())) }
+    if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", format::unit_symbol(unit.symbol()))) }
 }
 
 /// Drag value for a small size stored in meters (a layer, a section's side,

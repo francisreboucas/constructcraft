@@ -592,7 +592,7 @@ fn catalog_details(ui: &mut Ui, _state: &mut AppState, d: &mut ProfilesDialog) {
             ("profile-prop-j", get("j") * 1e8, "cm⁴"),
         ];
         for (label, value, unit) in rows {
-            table::readonly_row(ui, &tr(label), format!("{} {unit}", number(value)));
+            table::readonly_row(ui, &tr(label), format!("{} {}", number(value), cc_views::format::unit_symbol(unit)));
         }
     });
 }
@@ -793,7 +793,7 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
     table::section(ui, "profiles-properties", t!("profiles-properties"), |ui| {
         let rows = section_rows(&get, cc_views::format::system());
         for (label, value, unit) in rows {
-            table::readonly_row(ui, &tr(label), format!("{} {unit}", number(value)));
+            table::readonly_row(ui, &tr(label), format!("{} {}", number(value), cc_views::format::unit_symbol(unit)));
         }
         let users: Vec<&str> = detail["used_by"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
         let users = if users.is_empty() { "—".to_string() } else { users.join(", ") };

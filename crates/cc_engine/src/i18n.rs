@@ -158,10 +158,11 @@ pub fn language() -> Language {
     Language::ALL[CURRENT.load(Ordering::Relaxed)]
 }
 
-/// Switch the active language (also sets the number format).
+/// Switch the active language (also sets decimal and unit symbols).
 pub fn set_language(lang: Language) {
     CURRENT.store(lang.index(), Ordering::Relaxed);
     cc_views::format::set_decimal_comma(lang.decimal_comma());
+    cc_views::format::set_russian_unit_symbols(lang == Language::Ru);
 }
 
 /// Parse `key = value` lines; `#` starts a comment line.
@@ -290,6 +291,64 @@ mod tests {
         for l in Language::ALL {
             assert_eq!(Language::from_code(l.code()), Some(l));
         }
+    }
+
+    #[test]
+    fn unit_symbols_follow_the_interface_language() {
+        use cc_core::{AreaUnit, LengthUnit, Units, VolumeUnit};
+        use cc_views::format::{area_with, length_with, volume_with};
+
+        let previous = language();
+        // Switch back from Russian too, as when changing the language in Preferences.
+        for lang in [Language::Ru].into_iter().chain(Language::ALL.into_iter().filter(|l| *l != Language::Ru)) {
+            set_language(lang);
+            let russian = lang == Language::Ru;
+            let comma = lang.decimal_comma();
+            let mut units = Units::default();
+            units.length.decimals = 0;
+            units.length.symbol = true;
+            units.area.decimals = 0;
+            units.volume.decimals = 0;
+
+            for (unit, (latin, cyrillic)) in LengthUnit::ALL.into_iter().zip([
+                ("1 mm", "1 мм"),
+                ("1 cm", "1 см"),
+                ("1 m", "1 м"),
+                ("1 ft", "1 фут"),
+                ("1 in", "1 дюйм"),
+                ("1'-0\"", "1'-0\""),
+                ("1\"", "1\""),
+            ]) {
+                units.length.unit = unit;
+                assert_eq!(length_with(&units, comma, 1.0 / unit.per_meter()), if russian { cyrillic } else { latin });
+            }
+            for (unit, (latin, cyrillic)) in AreaUnit::ALL.into_iter().zip([
+                ("1 m²", "1 м²"),
+                ("1 cm²", "1 см²"),
+                ("1 ft²", "1 фут²"),
+                ("1 in²", "1 дюйм²"),
+            ]) {
+                units.area.unit = unit;
+                assert_eq!(
+                    area_with(&units, comma, 1.0 / unit.per_square_meter()),
+                    if russian { cyrillic } else { latin }
+                );
+            }
+            for (unit, (latin, cyrillic)) in VolumeUnit::ALL.into_iter().zip([
+                ("1 m³", "1 м³"),
+                ("1 L", "1 л"),
+                ("1 ft³", "1 фут³"),
+                ("1 yd³", "1 ярд³"),
+                ("1 gal", "1 галлон"),
+            ]) {
+                units.volume.unit = unit;
+                assert_eq!(
+                    volume_with(&units, comma, 1.0 / unit.per_cubic_meter()),
+                    if russian { cyrillic } else { latin }
+                );
+            }
+        }
+        set_language(previous);
     }
 
     fn placeholders_of(s: &str) -> BTreeSet<&str> {

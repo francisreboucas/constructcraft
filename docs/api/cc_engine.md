@@ -17262,7 +17262,7 @@ pub fn language() -> Language
 pub fn set_language(lang: Language)
 ```
 
-Switch the active language (also sets the number format).
+Switch the active language (also sets decimal and unit symbols).
 
 <a id="cc_engine-i18n-parse_messages"></a>
 

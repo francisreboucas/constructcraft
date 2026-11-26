@@ -172,7 +172,7 @@ fn value_text(measure: f64, typed: &str) -> String {
         (true, _) => format::length(measure),
         // Feet and inches carry their own marks.
         (false, true) => format!("{typed} \u{23ce}"),
-        (false, false) => format!("{typed} {} \u{23ce}", unit.symbol()),
+        (false, false) => format!("{typed} {} \u{23ce}", format::unit_symbol(unit.symbol())),
     }
 }
 
