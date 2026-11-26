@@ -10,9 +10,11 @@
 //!   (one file system, so the swap is atomic; the running copy keeps its
 //!   file), and the app offers to restart.
 //! - Windows installer (`.msi`, under Program Files): run `msiexec /passive`
-//!   when the app closes; ConstructCraft starts again when it is done.
+//!   when the app closes; the installer starts ConstructCraft again when it
+//!   is done (its `LaunchApp` action, asked for with `LAUNCHAPP=1`).
 //! - Windows `.zip` (anywhere else on Windows, `ccad.exe` beside the app):
-//!   the archive is unpacked in a staging folder, the running executables
+//!   the archive is unpacked in a staging folder by the app's own ZIP reader
+//!   (no script or other program is started), the running executables
 //!   are renamed to `.old` (Windows allows renaming a running program) and
 //!   the new ones take their names; the `.old` files go at the next start.
 //! - macOS app: the `.dmg` is opened; the user drags the app to Applications.
@@ -334,19 +336,60 @@ fn make_executable(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Unpack a `.zip` with the system's own tool (PowerShell on Windows).
+/// A package holds a handful of files.
+const MAX_UNPACKED_FILES: usize = 1000;
+/// And unpacks to no more than this.
+const MAX_UNPACKED: u64 = 2 << 30;
+
+/// Unpack a `.zip` into the folder `into` (emptied first), with the workspace's own ZIP reader:
+/// no other program is started. An entry that would land outside `into`, a link, or an archive
+/// larger than a package can be is an error.
 fn unzip(zip: &Path, into: &Path) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(into);
-    let status = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command"])
-        .arg(format!(
-            "Expand-Archive -LiteralPath {} -DestinationPath {} -Force",
-            ps_quote(&zip.to_string_lossy()),
-            ps_quote(&into.to_string_lossy())
-        ))
-        .status()
-        .map_err(|e| format!("powershell: {e}"))?;
-    if status.success() { Ok(()) } else { Err(format!("could not unpack {}", zip.display())) }
+    let size = std::fs::metadata(zip).map_err(|e| format!("{}: {e}", zip.display()))?.len();
+    if size > MAX_PACKAGE {
+        return Err(format!("{} is too large ({size} bytes)", zip.display()));
+    }
+    let data = std::fs::read(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    let bad = |what: &str| format!("could not unpack {}: {what}", zip.display());
+    let archive = cc_skp::zip::ZipArchive::new(&data).map_err(|e| bad(&e.to_string()))?;
+    if archive.len() > MAX_UNPACKED_FILES {
+        return Err(bad("too many files"));
+    }
+    let mut total = 0u64;
+    for i in 0..archive.len() {
+        let index = u32::try_from(i).map_err(|_| bad("too many files"))?;
+        let stat = archive.stat(index).map_err(|e| bad(&e.to_string()))?;
+        let name = String::from_utf8(stat.filename.clone()).map_err(|_| bad("a file name that is not UTF-8"))?;
+        // Unix file type in the high bits: 0o12 is a symbolic link.
+        if (stat.external_attr >> 16) & 0o170000 == 0o120000 {
+            return Err(bad(&format!("{name} is a link")));
+        }
+        let path = name.trim_end_matches('/');
+        let safe = !path.is_empty()
+            && !path.starts_with('/')
+            && !path.contains('\\')
+            && !path.contains(':')
+            && path.split('/').all(|p| !p.is_empty() && p != "." && p != "..");
+        if !safe {
+            return Err(bad(&format!("{name} is not a path inside the package")));
+        }
+        let target = into.join(PathBuf::from_iter(path.split('/')));
+        if stat.is_directory || name.ends_with('/') {
+            std::fs::create_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+            continue;
+        }
+        total = total.saturating_add(stat.uncomp_size);
+        if total > MAX_UNPACKED {
+            return Err(bad("it unpacks to too much"));
+        }
+        let bytes = archive.extract(index).map_err(|e| bad(&format!("{name}: {e}")))?;
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        std::fs::write(&target, bytes).map_err(|e| format!("{}: {e}", target.display()))?;
+    }
+    Ok(())
 }
 
 /// `name` in `dir` or a folder below it, at most `depth` levels down.
@@ -388,23 +431,15 @@ pub fn remove_old_executables(exe: &Path) {
     let _ = std::fs::remove_file(dir.join("ccad.exe.old"));
 }
 
-/// A PowerShell single-quoted string.
-fn ps_quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
-}
+/// The property that asks the installer to start ConstructCraft when it is done (the `LaunchApp`
+/// action of `packaging/windows/constructcraft.wxs`).
+const LAUNCH_PROPERTY: &str = "LAUNCHAPP=1";
 
-/// The command that runs the installer `msi`, waits for it and then starts
-/// `exe` (the installed program). If the user cancels the installer, the old
-/// version is still there to start.
-pub fn installer_command(msi: &Path, exe: &Path) -> (String, Vec<String>) {
-    // msiexec splits its own command line, so the path needs double quotes inside the argument.
-    let msi_arg = format!("\"{}\"", msi.to_string_lossy());
-    let script = format!(
-        "Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i',{},'/passive' -Wait; Start-Process -FilePath {}",
-        ps_quote(&msi_arg),
-        ps_quote(&exe.to_string_lossy())
-    );
-    ("powershell".into(), vec!["-NoProfile".into(), "-WindowStyle".into(), "Hidden".into(), "-Command".into(), script])
+/// The command that runs the installer `msi`: Windows Installer itself, showing its progress, with
+/// no script in between. The installer starts the new version when it is done; if the user cancels
+/// it, the old version is still installed.
+pub fn installer_command(msi: &Path) -> (&'static str, Vec<std::ffi::OsString>) {
+    ("msiexec", vec!["/i".into(), msi.as_os_str().to_os_string(), "/passive".into(), LAUNCH_PROPERTY.into()])
 }
 
 /// Whether the installer at `msi` is still the file verified at download (SHA-256 `sha256`).
@@ -426,8 +461,7 @@ pub fn finish(next: &Next) {
                 log::warn!("the update was not installed: {e}");
                 return;
             }
-            let exe = std::env::current_exe().unwrap_or_default();
-            let (program, args) = installer_command(msi, &exe);
+            let (program, args) = installer_command(msi);
             std::process::Command::new(program).args(args).spawn().map(|_| ())
         }
         Next::Opened => Ok(()),
@@ -625,19 +659,95 @@ mod tests {
     }
 
     #[test]
-    fn the_installer_command_quotes_paths() {
-        let (program, args) = installer_command(
-            Path::new("C:\\Temp\\it's here\\a.msi"),
-            Path::new("C:\\Program Files\\ConstructCraft\\constructcraft.exe"),
-        );
-        assert_eq!(program, "powershell");
-        let script = args.last().unwrap();
-        assert!(script.contains("'\"C:\\Temp\\it''s here\\a.msi\"'"), "{script}");
-        assert!(script.contains("'/passive' -Wait"), "{script}");
-        assert!(
-            script.ends_with("Start-Process -FilePath 'C:\\Program Files\\ConstructCraft\\constructcraft.exe'"),
-            "{script}"
-        );
+    fn the_installer_runs_without_a_script() {
+        use std::ffi::OsStr;
+        let msi = Path::new("C:\\Temp\\it's here\\a.msi");
+        let (program, args) = installer_command(msi);
+        assert_eq!(program, "msiexec");
+        // The path is one argument as it is: the standard library quotes it for the command line.
+        assert_eq!(args, [OsStr::new("/i"), msi.as_os_str(), OsStr::new("/passive"), OsStr::new("LAUNCHAPP=1")]);
+        // The installer is asked to start the app by a property it declares.
+        let wxs = include_str!("../../../packaging/windows/constructcraft.wxs");
+        assert!(wxs.contains("<Property Id=\"LAUNCHAPP\" Secure=\"yes\" />"), "the installer has no LAUNCHAPP");
+        assert!(wxs.contains("Condition=\"LAUNCHAPP = 1 AND NOT REMOVE\""), "nothing starts the app");
+    }
+
+    /// A stored (uncompressed) ZIP archive of `entries`.
+    fn zip_of(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut central = Vec::new();
+        for (name, data) in entries {
+            let offset = out.len() as u32;
+            let (crc, len, name_len) = (cc_skp::zip::crc32(data), data.len() as u32, name.len() as u16);
+            // Version needed, flags, method (stored), time and date, CRC, both sizes, name length.
+            let mut fields = vec![20u8, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            fields.extend_from_slice(&crc.to_le_bytes());
+            fields.extend_from_slice(&len.to_le_bytes());
+            fields.extend_from_slice(&len.to_le_bytes());
+            fields.extend_from_slice(&name_len.to_le_bytes());
+            out.extend_from_slice(b"PK\x03\x04");
+            out.extend_from_slice(&fields);
+            out.extend_from_slice(&[0; 2]);
+            out.extend_from_slice(name.as_bytes());
+            out.extend_from_slice(data);
+            central.extend_from_slice(b"PK\x01\x02");
+            central.extend_from_slice(&[20, 0]);
+            central.extend_from_slice(&fields);
+            // Extra and comment lengths, disk, internal and external attributes.
+            central.extend_from_slice(&[0; 12]);
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let (start, size, count) = (out.len() as u32, central.len() as u32, entries.len() as u16);
+        out.extend_from_slice(&central);
+        out.extend_from_slice(b"PK\x05\x06\0\0\0\0");
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+        out.extend_from_slice(&start.to_le_bytes());
+        out.extend_from_slice(&[0; 2]);
+        out
+    }
+
+    /// A package is unpacked by the app itself, and only inside its folder.
+    #[test]
+    fn packages_are_unpacked_inside_their_folder() {
+        let dir = std::env::temp_dir().join(format!("ccad-unzip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip = dir.join("package.zip");
+        let into = dir.join("unpacked");
+        std::fs::write(&zip, zip_of(&[("pkg/", b""), ("pkg/constructcraft.exe", b"app"), ("pkg/docs/a.md", b"text")]))
+            .unwrap();
+        // What an earlier attempt left is cleared.
+        std::fs::create_dir_all(&into).unwrap();
+        std::fs::write(into.join("stale"), b"").unwrap();
+        unzip(&zip, &into).unwrap();
+        assert_eq!(std::fs::read(into.join("pkg").join("constructcraft.exe")).unwrap(), b"app");
+        assert_eq!(std::fs::read(into.join("pkg").join("docs").join("a.md")).unwrap(), b"text");
+        assert!(!into.join("stale").exists());
+        assert_eq!(find_file(&into, "constructcraft.exe", 3), Some(into.join("pkg").join("constructcraft.exe")));
+
+        for name in ["../escaped.exe", "pkg/../../escaped.exe", "/escaped.exe", "C:/escaped.exe", "pkg\\escaped.exe"] {
+            std::fs::write(&zip, zip_of(&[("pkg/ok.txt", b"ok"), (name, b"bad")])).unwrap();
+            assert!(unzip(&zip, &into).is_err(), "{name} was unpacked");
+            assert!(!dir.join("escaped.exe").exists(), "{name} left the folder");
+        }
+        std::fs::write(&zip, b"not an archive").unwrap();
+        assert!(unzip(&zip, &into).is_err());
+        assert!(unzip(&dir.join("missing.zip"), &into).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Nothing in the updater goes through a command interpreter: scripts run with a hidden
+    /// window are what antivirus programs take a downloader for.
+    #[test]
+    fn the_updater_starts_no_shell() {
+        let source = include_str!("update_install.rs");
+        let code = source.split("#[cfg(test)]").next().unwrap().to_lowercase();
+        for word in ["powershell", "cmd.exe", "windowstyle"] {
+            assert!(!code.contains(word), "the updater mentions {word}");
+        }
     }
 
     #[test]
@@ -662,7 +772,7 @@ mod tests {
         if std::env::consts::OS != "windows" {
             return;
         }
-        let tag = "v0.7.0";
+        let tag = "v0.14.1";
         let name = format!("constructcraft-{tag}-x86_64-pc-windows-msvc.zip");
         let dir = std::env::temp_dir().join(format!("ccad-live-update-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
