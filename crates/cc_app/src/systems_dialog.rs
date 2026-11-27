@@ -243,10 +243,10 @@ pub fn sizing(ctx: &Context, state: &mut AppState) {
                 }
                 for c in &circuits {
                     ui.label(c["code"].as_str().unwrap_or(""));
-                    ui.label(format!("{} VA", n(&c["power_va"], 0)));
-                    ui.label(format!("{} A", n(&c["current_a"], 1)));
-                    ui.label(format!("{} A", n(&c["breaker_a"], 0)));
-                    ui.label(format!("{} mm²", n(&c["conductor_mm2"], 1)));
+                    ui.label(format!("{} {}", n(&c["power_va"], 0), cc_views::format::unit_symbol("VA")));
+                    ui.label(format!("{} {}", n(&c["current_a"], 1), cc_views::format::unit_symbol("A")));
+                    ui.label(format!("{} {}", n(&c["breaker_a"], 0), cc_views::format::unit_symbol("A")));
+                    ui.label(format!("{} {}", n(&c["conductor_mm2"], 1), cc_views::format::unit_symbol("mm²")));
                     ui.label(if c["length_m"].is_null() {
                         "–".into()
                     } else {
@@ -414,8 +414,8 @@ fn loads(ui: &mut Ui, state: &mut AppState) {
             ui.label(r["code"].as_str().unwrap_or(""));
             ui.label(r["name"].as_str().unwrap_or(""));
             ui.label(r["devices"].to_string());
-            ui.label(format!("{} VA", number(&r["power_va"], 0)));
-            ui.label(format!("{} A", number(&r["current_a"], 1)));
+            ui.label(format!("{} {}", number(&r["power_va"], 0), cc_views::format::unit_symbol("VA")));
+            ui.label(format!("{} {}", number(&r["current_a"], 1), cc_views::format::unit_symbol("A")));
             ui.end_row();
         }
     });

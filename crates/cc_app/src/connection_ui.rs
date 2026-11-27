@@ -103,7 +103,11 @@ pub fn props(ui: &mut Ui, state: &mut AppState, id: ElementId, connection: &Conn
             done |= length(ui, &t!("prop-anchor-length"), &mut p.anchor_length, LENGTH);
         }
         if let Some(g) = &built {
-            readonly_row(ui, &t!("col-plate-mass"), format!("{} kg", cc_views::format::number(g.plate_mass(), 2)));
+            readonly_row(
+                ui,
+                &t!("col-plate-mass"),
+                format!("{} {}", cc_views::format::number(g.plate_mass(), 2), cc_views::format::unit_symbol("kg")),
+            );
             readonly_row(ui, &t!("col-bolt-count"), g.bolt_count().to_string());
             if g.warning.is_some() {
                 ui.label(crate::theme::muted(t!("warn-connection-end")));

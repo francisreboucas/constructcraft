@@ -1414,7 +1414,7 @@ pub fn length_drag(value: &mut f64) -> DragValue<'_> {
         .custom_formatter(move |v, _| format::length_number_with(&units, comma, v))
         .custom_parser(move |s| format::parse_length_with(&parse_units, s));
     // Feet and inches carry their own marks.
-    if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", unit.symbol())) }
+    if unit.is_fractional() { drag } else { drag.suffix(format!(" {}", format::unit_symbol(unit.symbol()))) }
 }
 
 /// Drag value for a small size stored in meters (a layer, a section's side,
@@ -1481,7 +1481,7 @@ pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
 fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
     let (units, comma) = format::current();
     if units.system() == cc_core::MeasurementSystem::Metric {
-        return number_drag(value).suffix(" mm");
+        return number_drag(value).suffix(format!(" {}", format::unit_symbol("mm")));
     }
     let parse_units = units.clone();
     number_drag(value)
@@ -1738,7 +1738,11 @@ fn component_services(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_co
             cc_core::MepData::Device { device, power, ports } => {
                 readonly_row(ui, &t!("prop-device"), tr(device.key()));
                 if class == SystemClass::Circuit {
-                    readonly_row(ui, &t!("col-power"), format!("{} VA", format::number(power, 0)));
+                    readonly_row(
+                        ui,
+                        &t!("col-power"),
+                        format!("{} {}", format::number(power, 0), format::unit_symbol("VA")),
+                    );
                 }
                 if device == cc_core::DeviceKind::DataOutlet {
                     readonly_row(ui, &t!("prop-ports"), ports.to_string());

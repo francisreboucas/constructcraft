@@ -28,7 +28,7 @@ computes tables.
 | [`cc_views::dxf`](#mod-cc_views-dxf) | 9 | DXF export of drawings, for exchanging 2D views with other CAD programs. |
 | [`cc_views::export`](#mod-cc_views-export) | 6 | Vector export of drawings in paper millimeters (composed sheets) to SVG and PDF. |
 | [`cc_views::fonts`](#mod-cc_views-fonts) | 4 | Fallback fonts for the scripts Inter lacks (Chinese, Japanese, Korean, Lao), found among the fonts operating systems usually ship and read once. |
-| [`cc_views::format`](#mod-cc_views-format) | 50 | Number formatting for drawings, schedules and the interface. |
+| [`cc_views::format`](#mod-cc_views-format) | 53 | Number formatting for drawings, schedules and the interface. |
 | [`cc_views::graphics`](#mod-cc_views-graphics) | 5 | View graphics applied to drawings: hidden categories, filters and elements leave the drawing, as do elements the view's phase and phase filter leave out, and the resolved overrides change the pens of lines and the colors and patterns of fills (see `cc_core::graphics` and `cc_core::phase`). |
 | [`cc_views::hatch`](#mod-cc_views-hatch) | 9 | Hatch patterns: the line work of a material `Pattern` clipped to a polygon. |
 | [`cc_views::joins`](#mod-cc_views-joins) | 1 | Joined geometry in cut views (plans and sections): the outline of the element that is cut stops where the cutting element begins, the cutting element is painted over it, and when both are cut in the same material the line between them goes, so they read as one piece. |
@@ -1822,10 +1822,11 @@ Number formatting for drawings, schedules and the interface.
 Quantities follow the project units (`cc_core::Units`), set by the
 application with `set_units`; with the default number style the
 decimal symbol follows the interface language (`set_decimal_comma`).
-The `*_with` functions take the settings explicitly (used by tests and
-previews); the others read the current ones.
+Unit symbols use the active notation (`set_russian_unit_symbols`).
+The `*_with` functions take the project units and decimal symbol
+explicitly (used by tests and previews).
 
-**Items:** [`set_decimal_comma`](#cc_views-format-set_decimal_comma) · [`set_units`](#cc_views-format-set_units) · [`current`](#cc_views-format-current) · [`number_with`](#cc_views-format-number_with) · [`length_number_with`](#cc_views-format-length_number_with) · [`length_with`](#cc_views-format-length_with) · [`length_unit_with`](#cc_views-format-length_unit_with) · [`inch_size_with`](#cc_views-format-inch_size_with) · [`MetricSize`](#cc_views-format-metricsize) · [`size_with`](#cc_views-format-size_with) · [`POUND`](#cc_views-format-pound) · [`Quantity`](#cc_views-format-quantity) · [`quantity_with`](#cc_views-format-quantity_with) · [`area_with`](#cc_views-format-area_with) · [`volume_with`](#cc_views-format-volume_with) · [`angle_with`](#cc_views-format-angle_with) · [`slope_with`](#cc_views-format-slope_with) · [`parse_slope_with`](#cc_views-format-parse_slope_with) · [`money_with`](#cc_views-format-money_with) · [`scale_with`](#cc_views-format-scale_with) · [`paper_with`](#cc_views-format-paper_with) · [`paper_weight_with`](#cc_views-format-paper_weight_with) · [`parse_paper_with`](#cc_views-format-parse_paper_with) · [`parse_number`](#cc_views-format-parse_number) · [`parse_length_with`](#cc_views-format-parse_length_with) · [`parse_size_with`](#cc_views-format-parse_size_with) · [`number`](#cc_views-format-number) · [`meters`](#cc_views-format-meters) · [`length`](#cc_views-format-length) · [`imperial`](#cc_views-format-imperial) · [`bar_length`](#cc_views-format-bar_length) · [`trimmed`](#cc_views-format-trimmed) · [`bar_diameter`](#cc_views-format-bar_diameter) · [`scale`](#cc_views-format-scale) · [`inch_size`](#cc_views-format-inch_size) · [`size`](#cc_views-format-size) · [`quantity`](#cc_views-format-quantity) · [`system`](#cc_views-format-system) · [`parse_size`](#cc_views-format-parse_size) · [`parse_slope`](#cc_views-format-parse_slope) · [`area`](#cc_views-format-area) · [`volume`](#cc_views-format-volume) · [`angle`](#cc_views-format-angle) · [`slope`](#cc_views-format-slope) · [`money`](#cc_views-format-money) · [`parse_length`](#cc_views-format-parse_length) · [`paper`](#cc_views-format-paper) · [`paper_weight`](#cc_views-format-paper_weight) · [`parse_paper`](#cc_views-format-parse_paper) · [`elevation`](#cc_views-format-elevation)
+**Items:** [`set_decimal_comma`](#cc_views-format-set_decimal_comma) · [`set_russian_unit_symbols`](#cc_views-format-set_russian_unit_symbols) · [`russian_unit_symbols`](#cc_views-format-russian_unit_symbols) · [`unit_symbol`](#cc_views-format-unit_symbol) · [`set_units`](#cc_views-format-set_units) · [`current`](#cc_views-format-current) · [`number_with`](#cc_views-format-number_with) · [`length_number_with`](#cc_views-format-length_number_with) · [`length_with`](#cc_views-format-length_with) · [`length_unit_with`](#cc_views-format-length_unit_with) · [`inch_size_with`](#cc_views-format-inch_size_with) · [`MetricSize`](#cc_views-format-metricsize) · [`size_with`](#cc_views-format-size_with) · [`POUND`](#cc_views-format-pound) · [`Quantity`](#cc_views-format-quantity) · [`quantity_with`](#cc_views-format-quantity_with) · [`area_with`](#cc_views-format-area_with) · [`volume_with`](#cc_views-format-volume_with) · [`angle_with`](#cc_views-format-angle_with) · [`slope_with`](#cc_views-format-slope_with) · [`parse_slope_with`](#cc_views-format-parse_slope_with) · [`money_with`](#cc_views-format-money_with) · [`scale_with`](#cc_views-format-scale_with) · [`paper_with`](#cc_views-format-paper_with) · [`paper_weight_with`](#cc_views-format-paper_weight_with) · [`parse_paper_with`](#cc_views-format-parse_paper_with) · [`parse_number`](#cc_views-format-parse_number) · [`parse_length_with`](#cc_views-format-parse_length_with) · [`parse_size_with`](#cc_views-format-parse_size_with) · [`number`](#cc_views-format-number) · [`meters`](#cc_views-format-meters) · [`length`](#cc_views-format-length) · [`imperial`](#cc_views-format-imperial) · [`bar_length`](#cc_views-format-bar_length) · [`trimmed`](#cc_views-format-trimmed) · [`bar_diameter`](#cc_views-format-bar_diameter) · [`scale`](#cc_views-format-scale) · [`inch_size`](#cc_views-format-inch_size) · [`size`](#cc_views-format-size) · [`quantity`](#cc_views-format-quantity) · [`system`](#cc_views-format-system) · [`parse_size`](#cc_views-format-parse_size) · [`parse_slope`](#cc_views-format-parse_slope) · [`area`](#cc_views-format-area) · [`volume`](#cc_views-format-volume) · [`angle`](#cc_views-format-angle) · [`slope`](#cc_views-format-slope) · [`money`](#cc_views-format-money) · [`parse_length`](#cc_views-format-parse_length) · [`paper`](#cc_views-format-paper) · [`paper_weight`](#cc_views-format-paper_weight) · [`parse_paper`](#cc_views-format-parse_paper) · [`elevation`](#cc_views-format-elevation)
 
 <a id="cc_views-format-set_decimal_comma"></a>
 
@@ -1836,6 +1837,34 @@ pub fn set_decimal_comma(comma: bool)
 ```
 
 Use `,` (true) or `.` (false) as the decimal separator of the language.
+
+<a id="cc_views-format-set_russian_unit_symbols"></a>
+
+### fn `set_russian_unit_symbols`
+
+```rust
+pub fn set_russian_unit_symbols(enabled: bool)
+```
+
+Use Russian unit symbols in human-readable quantities.
+
+<a id="cc_views-format-russian_unit_symbols"></a>
+
+### fn `russian_unit_symbols`
+
+```rust
+pub(crate) fn russian_unit_symbols() -> bool
+```
+
+<a id="cc_views-format-unit_symbol"></a>
+
+### fn `unit_symbol`
+
+```rust
+pub fn unit_symbol(symbol: &str) -> &str
+```
+
+The symbol of a displayed unit in the active language.
 
 <a id="cc_views-format-set_units"></a>
 
@@ -2137,9 +2166,9 @@ pub fn parse_paper_with(units: &Units, text: &str) -> Option<f64>
 ```
 
 Parse a size on paper, in millimeters: a bare number is millimeters in
-metric projects and inches in imperial ones; `mm`, `cm`, `in` or `"`
-after it say which. Fractions and mixed numbers are read (`3/32`,
-`1 1/2"`); `None` for anything else.
+metric projects and inches in imperial ones. A suffix (`mm`, `cm`, `in`,
+their Russian spellings, or `"`) overrides the unit. Fractions and mixed
+numbers are read (`3/32`, `1 1/2"`); `None` for anything else.
 
 <a id="cc_views-format-parse_number"></a>
 
@@ -2159,8 +2188,8 @@ Parse a number typed with either decimal symbol and optional grouping.
 pub fn parse_length_with(units: &Units, text: &str) -> Option<f64>
 ```
 
-Parse a length typed in the length unit (a trailing unit symbol, or
-feet and inch marks, override it).
+Parse a length typed in the length unit (a trailing Latin or Russian
+unit symbol, or feet and inch marks, override it).
 
 <a id="cc_views-format-parse_size_with"></a>
 

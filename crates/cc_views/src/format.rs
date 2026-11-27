@@ -3,14 +3,16 @@
 //! Quantities follow the project units ([`cc_core::Units`]), set by the
 //! application with [`set_units`]; with the default number style the
 //! decimal symbol follows the interface language ([`set_decimal_comma`]).
-//! The `*_with` functions take the settings explicitly (used by tests and
-//! previews); the others read the current ones.
+//! Unit symbols use the active notation ([`set_russian_unit_symbols`]).
+//! The `*_with` functions take the project units and decimal symbol
+//! explicitly (used by tests and previews).
 
 use cc_core::Units;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static DECIMAL_COMMA: AtomicBool = AtomicBool::new(true);
+static RUSSIAN_UNIT_SYMBOLS: AtomicBool = AtomicBool::new(false);
 
 thread_local! {
     /// The units quantities are shown in, per thread: the app draws on one
@@ -22,6 +24,59 @@ thread_local! {
 /// Use `,` (true) or `.` (false) as the decimal separator of the language.
 pub fn set_decimal_comma(comma: bool) {
     DECIMAL_COMMA.store(comma, Ordering::Relaxed);
+}
+
+/// Use Russian unit symbols in human-readable quantities.
+pub fn set_russian_unit_symbols(enabled: bool) {
+    RUSSIAN_UNIT_SYMBOLS.store(enabled, Ordering::Relaxed);
+}
+
+pub(crate) fn russian_unit_symbols() -> bool {
+    RUSSIAN_UNIT_SYMBOLS.load(Ordering::Relaxed)
+}
+
+/// The symbol of a displayed unit in the active language.
+pub fn unit_symbol(symbol: &str) -> &str {
+    if russian_unit_symbols() { russian_symbol(symbol) } else { symbol }
+}
+
+fn russian_symbol(symbol: &str) -> &str {
+    match symbol {
+        "mm" => "мм",
+        "cm" => "см",
+        "m" => "м",
+        "ft" => "фут",
+        "in" => "дюйм",
+        "mm²" => "мм²",
+        "cm²" => "см²",
+        "m²" => "м²",
+        "ft²" => "фут²",
+        "in²" => "дюйм²",
+        "cm³" => "см³",
+        "m³" => "м³",
+        "ft³" => "фут³",
+        "in³" => "дюйм³",
+        "yd³" => "ярд³",
+        "cm⁴" => "см⁴",
+        "in⁴" => "дюйм⁴",
+        "L" => "л",
+        "gal" => "галлон",
+        "kg" => "кг",
+        "lb" => "фунт",
+        "kg/m" => "кг/м",
+        "lb/ft" => "фунт/фут",
+        "kg/m²" => "кг/м²",
+        "lb/ft²" => "фунт/фут²",
+        "kg/m³" => "кг/м³",
+        "lb/ft³" => "фунт/фут³",
+        "MPa" => "МПа",
+        "ksi" => "кип/дюйм²",
+        "l/s" => "л/с",
+        "gpm" => "галлон/мин",
+        "A" => "А",
+        "VA" => "ВА",
+        _ => symbol,
+    }
 }
 
 /// Display quantities with `units` from now on.
@@ -66,7 +121,7 @@ pub fn number_with(units: &Units, comma: bool, value: f64, decimals: usize) -> S
 }
 
 fn with_symbol(text: String, symbol: &str, show: bool) -> String {
-    if show { format!("{text} {symbol}") } else { text }
+    if show { format!("{text} {}", unit_symbol(symbol)) } else { text }
 }
 
 /// Inches rounded to 1/`den` (a power of two), as whole inches and the
@@ -135,14 +190,14 @@ pub fn length_number_with(units: &Units, comma: bool, meters: f64) -> String {
 pub fn length_with(units: &Units, comma: bool, meters: f64) -> String {
     let f = units.length;
     let text = length_number_with(units, comma, meters);
-    if f.unit.is_fractional() { text } else { with_symbol(text, f.unit.symbol(), f.symbol) }
+    with_symbol(text, f.unit.symbol(), f.symbol && !f.unit.is_fractional())
 }
 
 /// Length always with its unit symbol (property fields, labels).
 pub fn length_unit_with(units: &Units, comma: bool, meters: f64) -> String {
     let f = units.length;
     let text = length_number_with(units, comma, meters);
-    if f.unit.is_fractional() { text } else { format!("{text} {}", f.unit.symbol()) }
+    with_symbol(text, f.unit.symbol(), !f.unit.is_fractional())
 }
 
 /// A small size (a section's side, a diameter, a layer) in inches, without
@@ -192,9 +247,9 @@ pub fn size_with(units: &Units, comma: bool, meters: f64, metric: MetricSize) ->
     let meters = if meters.is_finite() { meters } else { 0.0 };
     match metric {
         MetricSize::Length => length_unit_with(units, comma, meters),
-        MetricSize::Mm(decimals) => format!("{} mm", number_with(units, comma, meters * 1000.0, decimals)),
+        MetricSize::Mm(decimals) => with_symbol(number_with(units, comma, meters * 1000.0, decimals), "mm", true),
         MetricSize::MmNumber(decimals) => number_with(units, comma, meters * 1000.0, decimals),
-        MetricSize::Cm(decimals) => format!("{} cm", number_with(units, comma, meters * 100.0, decimals)),
+        MetricSize::Cm(decimals) => with_symbol(number_with(units, comma, meters * 100.0, decimals), "cm", true),
         MetricSize::CmNumber(decimals) => number_with(units, comma, meters * 100.0, decimals),
         MetricSize::CmTag => {
             let v = meters * 100.0;
@@ -270,7 +325,7 @@ impl Quantity {
 pub fn quantity_with(units: &Units, comma: bool, q: Quantity, si: f64, decimals: usize) -> String {
     let system = units.system();
     let si = if si.is_finite() { si } else { 0.0 };
-    format!("{} {}", number_with(units, comma, si * q.per_si(system), decimals), q.symbol(system))
+    with_symbol(number_with(units, comma, si * q.per_si(system), decimals), q.symbol(system), true)
 }
 
 pub fn area_with(units: &Units, comma: bool, square_meters: f64) -> String {
@@ -381,7 +436,7 @@ fn trimmed_with(units: &Units, comma: bool, value: f64, decimals: usize) -> Stri
 pub fn paper_with(units: &Units, comma: bool, mm: f64) -> String {
     let mm = if mm.is_finite() { mm } else { 0.0 };
     if units.system() == cc_core::MeasurementSystem::Metric {
-        return format!("{} mm", trimmed_with(units, comma, mm, 2));
+        return with_symbol(trimmed_with(units, comma, mm, 2), "mm", true);
     }
     let inches = mm.abs() / PAPER_INCH;
     let steps = (inches * 64.0).round();
@@ -399,15 +454,15 @@ pub fn paper_with(units: &Units, comma: bool, mm: f64) -> String {
 pub fn paper_weight_with(units: &Units, comma: bool, mm: f64) -> String {
     let mm = if mm.is_finite() { mm } else { 0.0 };
     match units.system() {
-        cc_core::MeasurementSystem::Metric => format!("{} mm", number_with(units, comma, mm, 2)),
+        cc_core::MeasurementSystem::Metric => with_symbol(number_with(units, comma, mm, 2), "mm", true),
         cc_core::MeasurementSystem::Imperial => format!("{}\"", number_with(units, comma, mm / PAPER_INCH, 3)),
     }
 }
 
 /// Parse a size on paper, in millimeters: a bare number is millimeters in
-/// metric projects and inches in imperial ones; `mm`, `cm`, `in` or `"`
-/// after it say which. Fractions and mixed numbers are read (`3/32`,
-/// `1 1/2"`); `None` for anything else.
+/// metric projects and inches in imperial ones. A suffix (`mm`, `cm`, `in`,
+/// their Russian spellings, or `"`) overrides the unit. Fractions and mixed
+/// numbers are read (`3/32`, `1 1/2"`); `None` for anything else.
 pub fn parse_paper_with(units: &Units, text: &str) -> Option<f64> {
     let t = text.trim();
     let (negative, t) = match t.strip_prefix('-') {
@@ -415,12 +470,15 @@ pub fn parse_paper_with(units: &Units, text: &str) -> Option<f64> {
         None => (false, t),
     };
     let lower = t.to_lowercase();
-    let suffixes: [(&str, f64); 7] = [
+    let suffixes = [
         ("mm", 1.0),
         ("cm", 10.0),
         ("inches", PAPER_INCH),
         ("inch", PAPER_INCH),
         ("in", PAPER_INCH),
+        (russian_symbol("mm"), 1.0),
+        (russian_symbol("cm"), 10.0),
+        (russian_symbol("in"), PAPER_INCH),
         ("\"", PAPER_INCH),
         ("''", PAPER_INCH),
     ];
@@ -493,8 +551,13 @@ fn parse_imperial(units: &Units, text: &str) -> Option<Option<f64>> {
         Some(rest) => (true, rest.trim_start()),
         None => (false, t),
     };
-    let t = t.replace("feet", "'").replace("foot", "'").replace("ft", "'");
-    let t = t.replace("inches", "\"").replace("inch", "\"").replace("in", "\"").replace("''", "\"");
+    let t = t.replace("feet", "'").replace("foot", "'").replace("ft", "'").replace(russian_symbol("ft"), "'");
+    let t = t
+        .replace("inches", "\"")
+        .replace("inch", "\"")
+        .replace("in", "\"")
+        .replace(russian_symbol("in"), "\"")
+        .replace("''", "\"");
     let unit = units.length.unit;
     let inches = if let Some((feet, rest)) = t.split_once('\'') {
         let rest = rest.trim().trim_start_matches('-').trim();
@@ -519,13 +582,17 @@ fn parse_imperial(units: &Units, text: &str) -> Option<Option<f64>> {
     Some(m.map(|m| if negative { -m } else { m }))
 }
 
-/// Parse a length typed in the length unit (a trailing unit symbol, or
-/// feet and inch marks, override it).
+/// Parse a length typed in the length unit (a trailing Latin or Russian
+/// unit symbol, or feet and inch marks, override it).
 pub fn parse_length_with(units: &Units, text: &str) -> Option<f64> {
     let t = text.trim();
     for unit in [cc_core::LengthUnit::Millimeter, cc_core::LengthUnit::Centimeter, cc_core::LengthUnit::Meter] {
-        if let Some(n) = t.strip_suffix(unit.symbol()) {
-            return parse_number(n).map(|v| v / unit.per_meter());
+        let symbol = unit.symbol();
+        // A Russian inch also ends in "м". The preceding text must be a number.
+        if let Some(v) =
+            t.strip_suffix(symbol).or_else(|| t.strip_suffix(russian_symbol(symbol))).and_then(parse_number)
+        {
+            return Some(v / unit.per_meter());
         }
     }
     if let Some(m) = parse_imperial(units, t) {
@@ -783,6 +850,29 @@ mod tests {
         assert_eq!(parse_length_with(&u, "150"), Some(0.15));
         assert_eq!(parse_length_with(&u, "2,5 m"), Some(2.5));
         assert_eq!(parse_length_with(&u, "30cm"), Some(0.3));
+    }
+
+    #[test]
+    fn parsing_accepts_russian_unit_symbols() {
+        let units = Units::imperial();
+        for (latin, cyrillic) in [
+            ("3 m", "3 м"),
+            ("250 mm", "250 мм"),
+            ("250mm", "250мм"),
+            ("-2,5 cm", "-2,5 см"),
+            ("2 ft", "2 фут"),
+            ("6 1/2 in", "6 1/2 дюйм"),
+            ("12ft 6in", "12 фут 6 дюйм"),
+        ] {
+            let expected = parse_length_with(&units, latin).unwrap();
+            assert_eq!(parse_length_with(&units, cyrillic), Some(expected), "{cyrillic}");
+            assert_eq!(parse_size_with(&units, cyrillic), Some(expected), "{cyrillic}");
+        }
+        for (latin, cyrillic) in [("2 mm", "2 мм"), ("2 cm", "2 СМ"), ("1/2 in", "1/2 дюйм")] {
+            let expected = parse_paper_with(&units, latin).unwrap();
+            assert_eq!(parse_paper_with(&units, cyrillic), Some(expected), "{cyrillic}");
+        }
+        assert_eq!(parse_length_with(&units, "мм"), None);
     }
 
     #[test]

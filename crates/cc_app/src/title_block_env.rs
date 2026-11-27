@@ -1271,7 +1271,12 @@ fn number_field(ui: &mut Ui, state: &mut AppState, index: usize, current: &str, 
         // Only what the user enters is clamped: showing a value never rewrites it.
         let drag =
             egui::DragValue::new(&mut v).speed(spec.speed).range(spec.min..=spec.max).clamp_existing_to_range(false);
-        ui.add(drag.max_decimals(3).suffix(spec.suffix))
+        let suffix = if spec.suffix == " mm" {
+            format!(" {}", cc_views::format::unit_symbol("mm"))
+        } else {
+            spec.suffix.to_owned()
+        };
+        ui.add(drag.max_decimals(3).suffix(suffix))
     });
     if r.changed() {
         let value = serde_json::json!({ spec.shape: { spec.field: format!("{v}") } });
@@ -1332,7 +1337,13 @@ fn plane_props(ui: &mut Ui, state: &mut AppState, def: &ComponentDef, name: &str
     crate::table::row(ui, &t!("comp-env-at"), |ui| {
         at = crate::component_env::draft_field(ui, state, &format!("tb-plane-at:{name}"), &plane.at, 160.0)
     });
-    let shown = |v: f64| if cc_views::format::imperial() { cc_views::format::paper(v) } else { format!("{v} mm") };
+    let shown = |v: f64| {
+        if cc_views::format::imperial() {
+            cc_views::format::paper(v)
+        } else {
+            format!("{v} {}", cc_views::format::unit_symbol("mm"))
+        }
+    };
     crate::table::readonly_row(ui, &t!("prop-value"), value.map_or_else(String::new, shown));
     if at.is_some() || rename.is_some() {
         let command =

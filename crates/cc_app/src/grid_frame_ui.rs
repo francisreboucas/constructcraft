@@ -112,7 +112,13 @@ pub fn show(ctx: &Context, state: &mut AppState) {
                     settings::combo_items(ui, "gf-parallel", W, &mut d.parallel_to, &items);
                 });
                 settings::setting_row(ui, &t!("label-spacing"), None, |ui| {
-                    settings::drag(ui, egui::DragValue::new(&mut d.spacing).range(0.3..=50.0).speed(0.05).suffix(" m"));
+                    settings::drag(
+                        ui,
+                        egui::DragValue::new(&mut d.spacing)
+                            .range(0.3..=50.0)
+                            .speed(0.05)
+                            .suffix(format!(" {}", cc_views::format::unit_symbol("m"))),
+                    );
                 });
             });
             if let Some(e) = &d.error {

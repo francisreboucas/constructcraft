@@ -1591,7 +1591,7 @@ pub(crate) fn dimension_line(painter: &Painter, xf: &Xf, a: DVec2, p: DVec2, typ
         (true, _) => format::length(len),
         // Feet and inches carry their own marks.
         (false, true) => format!("{typed} \u{23ce}"),
-        (false, false) => format!("{typed} {} \u{23ce}", unit.symbol()),
+        (false, false) => format!("{typed} {} \u{23ce}", format::unit_symbol(unit.symbol())),
     };
     let screen_dir = xf.to_screen(dp) - xf.to_screen(da);
     let mid = xf.to_screen((da + dp) * 0.5) + (xf.to_screen(da + n) - xf.to_screen(da)).normalized() * 9.0;
@@ -2501,7 +2501,7 @@ fn strip_tool(
             Some(bulge) => arc_preview(painter, xf, a, b, bulge, 0.0, half),
             None => paint_wall_preview(painter, xf, a, b, 0.0, half),
         }
-        let unit = format::current().0.length.unit.symbol();
+        let unit = format::unit_symbol(format::current().0.length.unit.symbol());
         let arc = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge));
         let text = match (radius, arc) {
             (Some(_), Some(arc)) => {
@@ -3717,7 +3717,7 @@ fn wall_tool(
             Some(bulge) => arc_preview(painter, xf, a, b, bulge, center, half),
             None => paint_wall_preview(painter, xf, a, b, center, half),
         }
-        let unit = format::current().0.length.unit.symbol();
+        let unit = format::unit_symbol(format::current().0.length.unit.symbol());
         let arc = bulge.and_then(|bulge| cc_core::arc::Arc::from_bulge(a, b, bulge));
         let text = match (radius, arc) {
             (Some(_), Some(arc)) => {

@@ -329,7 +329,7 @@ fn dim(v: &Value) -> String {
 }
 
 fn unit() -> &'static str {
-    if cc_views::format::imperial() { "in" } else { "mm" }
+    cc_views::format::unit_symbol(if cc_views::format::imperial() { "in" } else { "mm" })
 }
 
 /// The pipe types of the project that are sizes of series `id`: size label → type id.

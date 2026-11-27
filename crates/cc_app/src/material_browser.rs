@@ -418,7 +418,7 @@ fn optional_value(
         };
         let system = format::system();
         let per = quantity.map_or(1.0, |q| q.per_si(system));
-        let unit = quantity.map_or(unit, |q| q.symbol(system));
+        let unit = format::unit_symbol(quantity.map_or(unit, |q| q.symbol(system)));
         if let Some(stored) = value {
             let mut v = stored * per;
             let speed = (v.abs() * 0.01).max(1e-6);
