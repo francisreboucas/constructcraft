@@ -176,7 +176,10 @@ fn the_members_meet_at_the_panel_points_whatever_their_sections() {
         assert_eq!(model.nodes.len(), 10, "{material}");
         // Each chord split into 4, 5 posts and 4 diagonals.
         assert_eq!(model.members.len(), 17, "{material}");
-        assert!(model.nodes.iter().all(|n| !n.support), "{material}: posts stand on the chord, not on supports");
+        assert!(
+            model.nodes.iter().all(|n| n.support.is_none()),
+            "{material}: posts stand on the chord, not on supports"
+        );
         for n in &model.nodes {
             let (x, z) = (n.position.x / 1.5, n.position.z);
             assert!((x - x.round()).abs() < 1e-9 && ((z - 2.0).abs() < 1e-9 || (z - 3.0).abs() < 1e-9), "{n:?}");

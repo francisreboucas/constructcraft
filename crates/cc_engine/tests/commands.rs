@@ -1350,12 +1350,12 @@ fn slabs_join_their_supports_and_the_analytical_model() {
     // Running it again joins nothing new.
     assert_eq!(run(&mut s, "slab_join_supports", json!({}))["joined"], json!([]));
 
-    // The analytical model: the beam between the column axes, splitting both columns.
+    // The analytical model: the beam between the column axes, where both columns end.
     let m = run(&mut s, "analytical_model", json!({}));
     let members = m["members"].as_array().unwrap();
     let of = |id: u64| members.iter().filter(|x| x["element"] == json!(id)).count();
     assert_eq!(of(beam), 1);
-    assert_eq!(members.iter().filter(|x| x["kind"] == json!("column")).count(), 4, "{m}");
+    assert_eq!(members.iter().filter(|x| x["kind"] == json!("column")).count(), 2, "{m}");
     let node = |i: &Value| m["nodes"][i.as_u64().unwrap() as usize].clone();
     let main = members.iter().find(|x| x["element"] == json!(beam)).unwrap();
     assert_eq!((node(&main["start"])["x"].clone(), node(&main["end"])["x"].clone()), (json!(0.0), json!(6.0)));
@@ -2138,6 +2138,105 @@ fn align_columns_across_levels() {
     let w = run(&mut s, "element_get", json!({"id": wall}));
     assert!(near(w["params"]["start"][0].as_f64().unwrap(), -0.1), "{w}");
     assert!(near(w["params"]["end"][0].as_f64().unwrap(), -0.1), "{w}");
+}
+
+/// Align in a section: the picks are points of the view, and a beam's side
+/// moves onto a wall's face cut by it, across the view (in plan, along the
+/// view's horizontal axis, which here runs west).
+#[test]
+fn align_a_beam_onto_a_wall_in_a_section() {
+    use cc_engine::commands::modify::view_align_line;
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0.0, -2.0], "end": [0.0, 4.0]})));
+    let beam = id(&run(&mut s, "beam_create", json!({"start": [3.0, -2.0], "end": [3.0, 4.0], "top_offset": 3.0})));
+    // Looking south: the view's x runs west, so a world x of 3 is drawn at -3.
+    let section = id(&run(&mut s, "view_create", json!({"kind": "section", "start": [-2.0, 1.0], "end": [6.0, 1.0]})));
+    let view = cc_core::ViewId(section);
+    let drawing = s.drawing(view).unwrap();
+    let (wall_a, wall_b) = view_align_line(&drawing, cc_core::ElementId(wall), glam::DVec2::new(-1.0, 1.0)).unwrap();
+    let east_face = wall_a.x;
+    assert!(near(wall_a.x, wall_b.x) && east_face < 0.0, "the wall's east face, drawn upright: {wall_a} {wall_b}");
+    let (beam_a, beam_b) = view_align_line(&drawing, cc_core::ElementId(beam), glam::DVec2::new(-2.0, 2.95)).unwrap();
+    assert!(near(beam_a.x, beam_b.x), "the beam's west side: {beam_a} {beam_b}");
+    let shift = beam_a.x - east_face;
+
+    let args = json!({
+        "id": beam, "reference": wall, "view": section,
+        "pick": [beam_a.x, 2.95], "reference_pick": [east_face, 1.0],
+    });
+    let depth = s.doc.undo_depth();
+    run(&mut s, "element_align", args);
+    assert_eq!(s.doc.undo_depth(), depth + 1);
+    let b = run(&mut s, "element_get", json!({"id": beam}));
+    let (x, y) = (b["params"]["start"][0].as_f64().unwrap(), b["params"]["start"][1].as_f64().unwrap());
+    assert!(near(x, 3.0 + shift) && near(y, -2.0), "moved east by {shift}, not along the beam: {b}");
+    let drawing = s.drawing(view).unwrap();
+    let (moved, _) = view_align_line(&drawing, cc_core::ElementId(beam), glam::DVec2::new(east_face, 2.95)).unwrap();
+    assert!(near(moved.x, east_face), "its side on the wall's face: {moved}");
+
+    // A horizontal line is not aligned onto a vertical one.
+    let below = glam::DVec2::new(east_face - 0.01, 0.0);
+    let (a, b) = view_align_line(&drawing, cc_core::ElementId(beam), below).unwrap();
+    assert!(near(a.y, b.y), "the beam's underside: {a} {b}");
+    let flat = json!({
+        "id": beam, "reference": wall, "view": section,
+        "pick": [(a.x + b.x) / 2.0, a.y], "reference_pick": [east_face, 1.0],
+    });
+    assert_eq!(fails(&mut s, "element_align", flat), ErrorCode::Rejected);
+    // In a section the picks are needed.
+    let bare = json!({"id": beam, "reference": wall, "view": section});
+    assert_eq!(fails(&mut s, "element_align", bare), ErrorCode::InvalidArguments);
+}
+
+/// Align by horizontal lines in a section: a wall's top stretches up to a
+/// beam's underside, a beam moves down whole onto a wall's top, and a wall's
+/// bottom is not taken past its top.
+#[test]
+fn align_heights_in_a_section() {
+    use cc_engine::commands::modify::view_align_line;
+    let mut s = Session::default();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    let wall = id(&run(&mut s, "wall_create", json!({"start": [0.0, -2.0], "end": [0.0, 4.0], "height": 2.5})));
+    let low = id(&run(&mut s, "wall_create", json!({"start": [6.0, -2.0], "end": [6.0, 4.0], "height": 2.0})));
+    let beam = id(&run(&mut s, "beam_create", json!({"start": [3.0, -2.0], "end": [3.0, 4.0], "top_offset": 3.0})));
+    // Looking north from x = 8: the view's x runs east from there (x - 8), its y is the height.
+    let section = id(&run(&mut s, "view_create", json!({"kind": "section", "start": [8.0, 1.0], "end": [-2.0, 1.0]})));
+    let view = cc_core::ViewId(section);
+    let lines = |s: &mut Session, e: u64, at: [f64; 2]| {
+        let drawing = s.drawing(view).unwrap();
+        view_align_line(&drawing, cc_core::ElementId(e), glam::DVec2::from(at)).unwrap()
+    };
+    let (wall_top, _) = lines(&mut s, wall, [-8.0, 10.0]);
+    assert!(near(wall_top.y, 2.5), "{wall_top}");
+    let (a, b) = lines(&mut s, beam, [-5.0, -10.0]);
+    assert!(near(a.y, b.y) && a.y < 3.0, "the beam's underside: {a} {b}");
+    let (beam_x, underside) = ((a.x + b.x) / 2.0, a.y);
+    let depth = 3.0 - underside;
+
+    // The wall's top up to the beam's underside: it stretches, its base stays.
+    let align = |s: &mut Session, id: u64, pick: [f64; 2], reference: u64, reference_pick: [f64; 2]| {
+        let args =
+            json!({"id": id, "reference": reference, "view": section, "pick": pick, "reference_pick": reference_pick});
+        s.execute("element_align", args)
+    };
+    align(&mut s, wall, [wall_top.x, 2.5], beam, [beam_x, underside]).unwrap();
+    let w = run(&mut s, "element_get", json!({"id": wall}));
+    assert!(near(w["params"]["height"].as_f64().unwrap(), underside), "{w}");
+    assert!(near(w["params"]["base_offset"].as_f64().unwrap(), 0.0), "{w}");
+
+    // The beam's underside down onto the low wall's top: the beam moves whole.
+    let (low_top, _) = lines(&mut s, low, [-2.0, 10.0]);
+    align(&mut s, beam, [beam_x, underside], low, [low_top.x, low_top.y]).unwrap();
+    let b = run(&mut s, "element_get", json!({"id": beam}));
+    assert!(near(b["params"]["top_offset"].as_f64().unwrap(), 2.0 + depth), "{b}");
+
+    // The low wall's bottom up past its top is refused, and nothing changes.
+    let undo = s.doc.undo_depth();
+    let (low_bottom, _) = lines(&mut s, low, [-2.0, -10.0]);
+    let refused = align(&mut s, low, [low_bottom.x, low_bottom.y], beam, [beam_x, 2.0 + depth]).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Rejected);
+    assert_eq!(s.doc.undo_depth(), undo);
 }
 
 /// Pitched roofs over concave outlines and around courtyards: analytic

@@ -320,6 +320,7 @@ mod tests {
                 height: 3.0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             let column = ElementId(e.alloc_id());
             e.add_element(element(column, level, column_type, ElementKind::Column(col)));
@@ -371,6 +372,7 @@ mod tests {
             height: 3.0,
             top: WallTop::Unconnected,
             structural: true,
+            base_support: Default::default(),
         });
         let beam = ElementKind::Beam(crate::Beam::new(DVec2::ZERO, DVec2::X, 3.0));
         let c = |end, kind| Connection::new(ElementId(1), end, kind);

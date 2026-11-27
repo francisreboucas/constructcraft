@@ -385,6 +385,7 @@ impl WallFraming {
                 height: z1 - z0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             })
         };
         let beam = |u0: f64, u1: f64, top_z: f64| {

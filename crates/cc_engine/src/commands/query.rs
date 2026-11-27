@@ -236,6 +236,16 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
             false => Vec::new(),
         }
     };
+    // The walls an interior elevation marker can show, clockwise from north.
+    let marker_walls = match &e.kind {
+        ElementKind::InteriorMarker(m) => {
+            let phase = s.doc.creation_phase;
+            let (p, g) = s.project_and_geometry();
+            let faces = cc_views::interior::wall_faces(p, g, e.level, m, phase);
+            Some(json!(faces.iter().map(|f| json!({ "wall": f.wall.0, "length": f.length })).collect::<Vec<_>>()))
+        }
+        _ => None,
+    };
     let p = s.project();
     let mut derived = serde_json::Map::new();
     match &e.kind {
@@ -289,6 +299,12 @@ pub(crate) fn element_json(s: &mut Session, id: ElementId) -> Option<Value> {
         ElementKind::WallFraming(f) => super::wall_framing::derived(p, f, &mut derived),
         ElementKind::Truss(t) => super::framing::derived(t, &mut derived),
         ElementKind::Bracing(b) => super::bracing::derived(b, &mut derived),
+        ElementKind::InteriorMarker(_) => {
+            derived.insert("views".into(), super::interior::marker_views(p, e.id));
+            if let Some(walls) = marker_walls {
+                derived.insert("walls".into(), walls);
+            }
+        }
         ElementKind::Shaft(sh) => {
             let (bottom, top) = p.shaft_span(&e, sh);
             derived.insert("bottom".into(), json!(bottom));

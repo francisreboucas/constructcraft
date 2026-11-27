@@ -8,8 +8,8 @@ use crate::registry::{Command, CommandKind};
 use crate::session::Session;
 use crate::t;
 use cc_core::{
-    Beam, BeamLateral, BeamVertical, Category, Ceiling, Column, Component, ElementId, ElementKind, Floor, Grid, Hosted,
-    LevelId, LocationLine, Project, Railing, Roof, RoofShape, Room, Wall, WallTop,
+    BaseSupport, Beam, BeamLateral, BeamVertical, Category, Ceiling, Column, Component, ElementId, ElementKind, Floor,
+    Grid, Hosted, LevelId, LocationLine, Project, Railing, Roof, RoofShape, Room, Wall, WallTop,
 };
 use cc_geom::polygon;
 use glam::DVec2;
@@ -872,6 +872,9 @@ pub struct ColumnCreate {
     /// Load-bearing (default true); an architectural column is cut by the walls it is joined with.
     #[serde(default)]
     pub structural: Option<bool>,
+    /// The support at its base in the analytical model: `fixed` (default) or `pinned`.
+    #[serde(default)]
+    pub base_support: Option<String>,
 }
 
 impl Command for ColumnCreate {
@@ -880,6 +883,11 @@ impl Command for ColumnCreate {
     fn run(self, s: &mut Session) -> Result<Value> {
         let p = s.project();
         let level = refs::level_or_first(p, self.level.as_ref())?;
+        let base_support = match self.base_support.as_deref() {
+            None => BaseSupport::default(),
+            Some(code) => BaseSupport::from_code(code)
+                .ok_or_else(|| EngineError::invalid(format!("base_support must be fixed or pinned, not {code}")))?,
+        };
         let column = Column {
             position: point(self.position)?,
             rotation_deg: finite(self.rotation.unwrap_or(0.0), "rotation")?,
@@ -887,6 +895,7 @@ impl Command for ColumnCreate {
             height: positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?,
             top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_top(p, level)),
             structural: self.structural.unwrap_or(true),
+            base_support,
         };
         create(s, t!("tx-create-column"), level, Category::Column, self.type_ref.as_ref(), ElementKind::Column(column))
     }

@@ -751,6 +751,7 @@ mod tests {
                 height: 3.0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             e.add_element(Element {
                 id,

@@ -358,24 +358,7 @@ pub(crate) fn shortcuts(ctx: &egui::Context, state: &mut AppState) {
         return;
     }
     if escape {
-        if !state.typed.is_empty() || state.typed.angle_active {
-            state.typed.clear();
-        } else if crate::detail_ui::escape(state) || crate::wall_draw_ui::escape(state) {
-            // The curve being drawn was dropped; the tool stays.
-        } else if crate::tools::spline_wall_escape(state) {
-            // The spline wall being drawn was ended where it was.
-        } else if crate::modify::roof_join_escape(state) {
-            // Join Roof is back at its first pick.
-        } else if !state.interaction.is_idle() {
-            state.interaction = Default::default();
-        } else if state.tool != Tool::Select {
-            state.set_tool(Tool::Select);
-        } else {
-            state.selection.clear();
-            state.sheet_selection = None;
-            state.section_selection = None;
-        }
-        state.key_buffer.clear();
+        escape_step(state);
     }
     if delete {
         match state.sheet_selection {
@@ -758,6 +741,30 @@ fn retain_tabs(dock: &mut DockState<ViewId>, mut keep: impl FnMut(&mut ViewId) -
         };
         leaf.active = egui_dock::TabIndex(index);
     }
+}
+
+/// What one press of Esc does outside sketches and the component
+/// environment: drop a typed value, then what the tool is drawing, then the
+/// tool (back to Select), then the selection.
+pub(crate) fn escape_step(state: &mut AppState) {
+    if !state.typed.is_empty() || state.typed.angle_active {
+        state.typed.clear();
+    } else if crate::detail_ui::escape(state) || crate::wall_draw_ui::escape(state) {
+        // The curve being drawn was dropped; the tool stays.
+    } else if crate::tools::spline_wall_escape(state) {
+        // The spline wall being drawn was ended where it was.
+    } else if crate::modify::roof_join_escape(state) {
+        // Join Roof is back at its first pick.
+    } else if !state.interaction.is_idle() {
+        state.interaction = Default::default();
+    } else if state.tool != Tool::Select {
+        state.set_tool(Tool::Select);
+    } else {
+        state.selection.clear();
+        state.sheet_selection = None;
+        state.section_selection = None;
+    }
+    state.key_buffer.clear();
 }
 
 #[cfg(test)]

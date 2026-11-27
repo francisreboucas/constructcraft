@@ -380,6 +380,7 @@ impl SteelBuilding {
                     height: self.eave_height + rafter_depth,
                     top: WallTop::Unconnected,
                     structural: true,
+                    base_support: Default::default(),
                 };
                 out.push(RoleKind::Column, k, i, self.column_type, ElementKind::Column(column));
             }

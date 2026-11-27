@@ -699,6 +699,7 @@ impl ViewTemplate {
                 | ViewKind::CeilingPlan { .. }
                 | ViewKind::ThreeD { .. }
                 | ViewKind::Elevation { .. }
+                | ViewKind::InteriorElevation { .. }
                 | ViewKind::Section { .. }
         )
     }

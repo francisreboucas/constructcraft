@@ -555,6 +555,7 @@ mod tests {
                 height: 3.0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             self.doc.edit("column", |e| add(e, level, ty, ElementKind::Column(col)))
         }

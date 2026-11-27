@@ -177,6 +177,23 @@ impl EditCtx<'_> {
                 }
             }
         }
+        // Interior elevations of a flipped wall keep showing the same physical
+        // face, now the other one by the wall's own left and right.
+        let views: Vec<crate::ViewId> = self
+            .project()
+            .views
+            .values()
+            .filter(|v| match v.kind {
+                crate::ViewKind::InteriorElevation { face: crate::interior::Face::Wall(w), .. } => walls.contains(&w),
+                _ => false,
+            })
+            .map(|v| v.id)
+            .collect();
+        for view in views {
+            if let Some(crate::ViewKind::InteriorElevation { left, .. }) = self.view_mut(view).map(|v| &mut v.kind) {
+                *left = !*left;
+            }
+        }
         self.flip_dimension_refs(&walls.into_iter().collect(), &hosted_all);
         Ok(changed)
     }

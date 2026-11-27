@@ -77,6 +77,8 @@ pub enum ElementKind {
     Sweep(crate::profile_sweep::Sweep),
     /// A vertical opening through floors, ceilings and roofs.
     Shaft(crate::shaft::Shaft),
+    /// A marker of interior elevations in a plan (see [`crate::interior`]).
+    InteriorMarker(crate::interior::InteriorMarker),
     /// A parametric steel building: it owns the columns and beams of its frames.
     SteelBuilding(Box<crate::steel_building::SteelBuilding>),
     /// A parametric truss: it owns the beams and columns of its chords and web.
@@ -139,6 +141,7 @@ impl Element {
             ElementKind::Mass(_) => Category::Mass,
             ElementKind::Sweep(_) => Category::Sweep,
             ElementKind::Shaft(_) => Category::Shaft,
+            ElementKind::InteriorMarker(_) => Category::InteriorMarker,
             ElementKind::SteelBuilding(_) => Category::SteelBuilding,
             ElementKind::Truss(_) => Category::Truss,
             ElementKind::Bracing(_) => Category::Bracing,
@@ -397,6 +400,7 @@ impl Element {
             ElementKind::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Sweep(s) => s.path.iter_mut().for_each(|p| *p += delta),
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(|p| *p += delta),
+            ElementKind::InteriorMarker(m) => m.position += delta,
             ElementKind::SteelBuilding(b) => b.origin += delta,
             ElementKind::Truss(t) => {
                 t.start += delta;
@@ -1098,6 +1102,51 @@ pub struct Column {
     /// A load-bearing column; an architectural one (off) is cut by the walls it is joined with.
     #[serde(default = "yes")]
     pub structural: bool,
+    /// What holds a structural column at its base, where it rests on a
+    /// support (the analytical model's restraint there).
+    #[serde(default)]
+    pub base_support: BaseSupport,
+}
+
+/// The support at a column's base in the analytical model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum BaseSupport {
+    /// Translations and rotations held.
+    #[default]
+    Fixed,
+    /// Translations held, rotations free.
+    Pinned,
+}
+
+impl BaseSupport {
+    pub const ALL: [BaseSupport; 2] = [BaseSupport::Fixed, BaseSupport::Pinned];
+
+    /// The name commands and exports use.
+    pub fn code(self) -> &'static str {
+        match self {
+            BaseSupport::Fixed => "fixed",
+            BaseSupport::Pinned => "pinned",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.code().eq_ignore_ascii_case(code))
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            BaseSupport::Fixed => "base-support-fixed",
+            BaseSupport::Pinned => "base-support-pinned",
+        }
+    }
+
+    /// The degrees of freedom held, in global axes: `[ux, uy, uz, rx, ry, rz]`.
+    pub fn restraint(self) -> [bool; 6] {
+        match self {
+            BaseSupport::Fixed => [true; 6],
+            BaseSupport::Pinned => [true, true, true, false, false, false],
+        }
+    }
 }
 
 /// Which line across a beam's section its `start`-`end` location line follows.

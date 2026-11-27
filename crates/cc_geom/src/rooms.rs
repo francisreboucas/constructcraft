@@ -295,6 +295,65 @@ fn without_spurs(mut poly: Vec<DVec2>) -> Vec<DVec2> {
     poly
 }
 
+/// A stretch of a space's boundary and the wall whose face it lies on
+/// (`None`: a room separation line, or a face no wall of the list has).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoundaryEdge {
+    pub a: DVec2,
+    pub b: DVec2,
+    pub wall: Option<cc_core::ElementId>,
+}
+
+/// How far a boundary edge may lie from a wall's face and still be on it, meters.
+const ON_FACE: f64 = 1e-4;
+
+/// The edges of `boundary` (as [`room_boundary`] gives it) with the wall of
+/// `walls` (footprints by id) each lies on. A side of the boundary that
+/// runs along several walls in line is cut where they change.
+pub fn boundary_edges(boundary: &[DVec2], walls: &[(cc_core::ElementId, Vec<DVec2>)]) -> Vec<BoundaryEdge> {
+    let n = boundary.len();
+    let mut out = Vec::new();
+    for i in 0..n {
+        let (Some(&a), Some(&b)) = (boundary.get(i), boundary.get((i + 1) % n)) else { continue };
+        let length = a.distance(b);
+        let Some(u) = (b - a).try_normalize() else { continue };
+        // The stretches of this side that lie on an edge of a wall's footprint.
+        let mut pieces: Vec<(f64, f64, cc_core::ElementId)> = Vec::new();
+        for (id, foot) in walls {
+            let m = foot.len();
+            for k in 0..m {
+                let (Some(&p), Some(&q)) = (foot.get(k), foot.get((k + 1) % m)) else { continue };
+                if (p - a).perp_dot(u).abs() > ON_FACE || (q - a).perp_dot(u).abs() > ON_FACE {
+                    continue;
+                }
+                let (tp, tq) = ((p - a).dot(u), (q - a).dot(u));
+                let (t0, t1) = (tp.min(tq).max(0.0), tp.max(tq).min(length));
+                if t1 - t0 > ON_FACE {
+                    pieces.push((t0, t1, *id));
+                }
+            }
+        }
+        pieces.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut at = 0.0;
+        for (t0, t1, id) in pieces {
+            // Faces overlapping an earlier one give way to it.
+            let t0 = t0.max(at);
+            if t1 - t0 <= ON_FACE {
+                continue;
+            }
+            if t0 - at > ON_FACE {
+                out.push(BoundaryEdge { a: a + u * at, b: a + u * t0, wall: None });
+            }
+            out.push(BoundaryEdge { a: a + u * t0, b: a + u * t1, wall: Some(id) });
+            at = t1;
+        }
+        if length - at > ON_FACE {
+            out.push(BoundaryEdge { a: a + u * at, b, wall: None });
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -435,5 +494,27 @@ mod tests {
             }
         }
         assert_eq!(arrangement.room_boundary(DVec2::new(3.0, 1.5)), None, "inside a wall");
+    }
+
+    #[test]
+    fn boundary_edges_name_their_walls_and_split_where_they_change() {
+        let id = cc_core::ElementId;
+        // A 4 x 3 room: the south side is two walls in line (0..2.5 and 2.5..4), the north one has no wall.
+        let boundary = vec![DVec2::new(0.0, 0.0), DVec2::new(4.0, 0.0), DVec2::new(4.0, 3.0), DVec2::new(0.0, 3.0)];
+        let strip = |x0: f64, x1: f64, y0: f64, y1: f64| {
+            vec![DVec2::new(x0, y0), DVec2::new(x1, y0), DVec2::new(x1, y1), DVec2::new(x0, y1)]
+        };
+        let walls = vec![
+            (id(1), strip(-0.2, 2.5, -0.2, 0.0)),
+            (id(2), strip(2.5, 4.2, -0.2, 0.0)),
+            (id(3), strip(4.0, 4.2, 0.0, 3.0)),
+            (id(4), strip(-0.2, 0.0, 0.0, 3.0)),
+        ];
+        let edges = boundary_edges(&boundary, &walls);
+        let of =
+            |w: Option<u64>| -> f64 { edges.iter().filter(|e| e.wall == w.map(id)).map(|e| e.a.distance(e.b)).sum() };
+        assert!((of(Some(1)) - 2.5).abs() < 1e-9 && (of(Some(2)) - 1.5).abs() < 1e-9, "{edges:?}");
+        assert!((of(Some(3)) - 3.0).abs() < 1e-9 && (of(Some(4)) - 3.0).abs() < 1e-9, "{edges:?}");
+        assert!((of(None) - 4.0).abs() < 1e-9, "the north side has no wall: {edges:?}");
     }
 }

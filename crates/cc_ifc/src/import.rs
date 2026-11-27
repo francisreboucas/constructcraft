@@ -3712,6 +3712,7 @@ impl<'a> Importer<'a> {
             height: z1 - z0,
             top: WallTop::Unconnected,
             structural: true,
+            base_support: Default::default(),
         };
         self.add_element(id, e, level, type_id, self.mark(e), ElementKind::Column(column));
         true

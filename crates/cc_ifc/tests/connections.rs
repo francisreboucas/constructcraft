@@ -47,6 +47,7 @@ pub(crate) fn connections_project() -> Project {
                 height: 3.0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             })
         };
         let a = add(e, level, column_t, column(0.0));

@@ -507,7 +507,7 @@ impl SceneMesh {
         let mut mesh = Self::faint(tess);
         member_lines(model, selected, false, &mut mesh.edges);
         for n in &model.nodes {
-            let color = if n.support { [0.05, 0.5, 0.1, 1.0] } else { [0.02, 0.02, 0.025, 1.0] };
+            let color = if n.support.is_some() { [0.05, 0.5, 0.1, 1.0] } else { [0.02, 0.02, 0.025, 1.0] };
             let r = 0.08;
             for d in [glam::DVec3::X, glam::DVec3::Y, glam::DVec3::Z] {
                 line(&mut mesh.edges, n.position - d * r, n.position + d * r, color);

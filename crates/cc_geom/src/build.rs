@@ -899,6 +899,26 @@ impl ModelGeometry {
         crate::room_boundary(&self.bounding_footprints(project, level, phase), point)
     }
 
+    /// The boundary of the space around `point` on `level` in `phase` (see
+    /// [`ModelGeometry::room_at`]) as edges that name the wall each lies on.
+    pub fn room_edges_at(
+        &self,
+        project: &Project,
+        level: cc_core::LevelId,
+        point: DVec2,
+        phase: Option<cc_core::PhaseId>,
+    ) -> Option<Vec<crate::BoundaryEdge>> {
+        let boundary = self.room_at(project, level, point, phase)?;
+        let phase = phase.and_then(|ph| project.phase_index(ph)).or(project.phases.len().checked_sub(1));
+        let walls: Vec<(ElementId, Vec<DVec2>)> = project
+            .walls()
+            .filter(|(e, w)| e.level == level && w.room_bounding)
+            .filter(|(e, _)| phase.is_none_or(|ph| project.stands_after(e, ph)))
+            .filter_map(|(e, _)| Some((e.id, self.walls.get(&e.id)?.footprint())))
+            .collect();
+        Some(crate::boundary_edges(&boundary, &walls))
+    }
+
     /// Rooms are bounded by the walls standing at the end of the phase
     /// they are created in.
     fn build_rooms(&mut self, project: &Project) {
@@ -1987,6 +2007,7 @@ mod tests {
                     height: 3.0,
                     top,
                     structural: true,
+                    base_support: Default::default(),
                 }),
             );
             let beam = add(

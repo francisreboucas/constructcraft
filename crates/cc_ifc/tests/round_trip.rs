@@ -362,6 +362,7 @@ fn framed_beams_round_trip() {
             height: 3.0,
             top: WallTop::Unconnected,
             structural: true,
+            base_support: Default::default(),
         };
         add(e, Category::Column, ElementKind::Column(column));
         add(e, Category::Beam, ElementKind::Beam(Beam::new(DVec2::ZERO, DVec2::new(4.0, 0.0), 3.0)));
@@ -429,6 +430,7 @@ fn arc_beams_round_trip() {
                 height: 3.0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             add(e, Category::Column, ElementKind::Column(column));
         }
@@ -1306,6 +1308,7 @@ fn profiles_project() -> Project {
                 height: 3.0,
                 top: WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             let beam = Beam::new(DVec2::new(x, 10.0), DVec2::new(x + 4.0, 10.0 + 0.5 * (i % 2) as f64), 3.0);
             for (type_name, data, kind) in [
@@ -1532,6 +1535,7 @@ fn a_column_without_a_section_keeps_its_box_and_material() {
         height: 3.0,
         top: cc_core::WallTop::Unconnected,
         structural: true,
+        base_support: Default::default(),
     };
     add_plain(&mut p, tid, ElementKind::Column(column));
     let text = export(&p, &ExportOptions::default());

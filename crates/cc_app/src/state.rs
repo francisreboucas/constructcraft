@@ -337,6 +337,9 @@ pub struct AppState {
     pub detail_component: crate::detail_component_ui::PlaceOptions,
     /// Options of the Callout tool (scale, drafting view pointed to).
     pub callout: crate::callout_ui::CalloutOptions,
+    /// The Interior Elevation tool makes a view per wall of the space
+    /// instead of four directions (see [`crate::interior_ui`]).
+    pub interior_walls: bool,
     /// The visual programming editor (see [`crate::graph_ui`]).
     pub graph: crate::graph_ui::GraphEditor,
     /// The macro editor (see [`crate::macro_ui`]).
@@ -435,6 +438,7 @@ impl AppState {
             detail_draw: None,
             detail_component: Default::default(),
             callout: Default::default(),
+            interior_walls: false,
         }
     }
 

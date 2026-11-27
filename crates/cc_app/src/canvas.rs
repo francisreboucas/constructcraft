@@ -333,6 +333,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, view_id: ViewId) {
     if !zooming && !editing {
         crate::tools::handle(ui, &resp, &painter, state, &view, &xf, &drawing);
     }
+    crate::context_menu::tool(&resp, state, view_id);
     crate::dim_edit::show(ui, state, view_id);
     crate::text_tool::show(ui, state, view_id);
     temporary_frame(ui, state, rect, view_id);

@@ -150,7 +150,9 @@ impl<'a> Look<'a> {
             let bottom = geom.bounds().map(|(lo, _)| lo.z);
             let catch = match (&view.kind, indoors) {
                 (cc_core::ViewKind::FloorPlan { .. }, Some(indoors)) => Catch::Site(indoors),
-                (cc_core::ViewKind::Section { .. }, Some(indoors)) => Catch::Outdoors(indoors),
+                (cc_core::ViewKind::Section { .. } | cc_core::ViewKind::InteriorElevation { .. }, Some(indoors)) => {
+                    Catch::Outdoors(indoors)
+                }
                 _ => Catch::All,
             };
             Shadows { ground: Some(project.sun_ground_height(view, bottom)), skip, catch }
@@ -615,8 +617,73 @@ pub fn render(
                 .filter_map(|(a, b)| planes.iter().skip(1).try_fold((a, b), |(a, b), &(p, n)| clip_segment(a, b, p, n)))
                 .map(|(a, b)| (frame.project(a), frame.project(b)))
                 .collect();
+            // A layered wall's cut shows its layers (at the medium and fine levels, as in plan).
+            let wall = geom
+                .walls
+                .get(&solid.element)
+                .filter(|g| cut.is_some() && !solid.secondary && g.curtain.is_none() && g.layers.len() > 1);
+            // So does a layered floor's or roof's, its thickness measured
+            // vertically (as their bodies are built), seen in an upright view.
+            let slab = cut
+                .filter(|_| !solid.secondary && frame.up.z > 0.99)
+                .and_then(|c| c.project.element(solid.element).and_then(|e| c.project.element_type(e.type_id)))
+                .and_then(|t| match &t.data {
+                    TypeData::Floor { layers } | TypeData::Roof { layers, .. } => Some(layers),
+                    _ => None,
+                })
+                .filter(|l| l.len() > 1 && l.iter().map(|l| l.thickness).sum::<f64>() > 1e-9);
             for pts in chain_loops(&segs).into_iter().filter(|_| style.fills()) {
                 match cut {
+                    Some(c) if let Some(layers) = slab => {
+                        let total: f64 = layers.iter().map(|l| l.thickness).sum();
+                        let mut fractions = vec![0.0];
+                        let mut sum = 0.0;
+                        for l in layers {
+                            sum += l.thickness;
+                            fractions.push((sum / total).min(1.0));
+                        }
+                        let (pieces, lines) = slab_layers(&pts, &fractions);
+                        for (layer, pieces) in layers.iter().zip(pieces) {
+                            for piece in pieces {
+                                let element = Some(solid.element);
+                                crate::cut::cut_fill(&mut d, c.project, &layer.material, piece, c.spacing, element);
+                            }
+                        }
+                        let functions: Vec<_> = layers.iter().map(|l| l.function).collect();
+                        for (k, lines) in lines.into_iter().enumerate() {
+                            let pen = crate::plan::layer_pen(crate::plan::boundary_function(&functions, k));
+                            for (a, b) in lines {
+                                d.polyline_pen(&[a, b], false, LineStyle::Thin, pen, Some(solid.element));
+                            }
+                        }
+                    }
+                    Some(c) if let Some(g) = wall => {
+                        let v_of = |s: DVec2| g.local((point + frame.right * s.x + frame.up * s.y).truncate()).1;
+                        let v: Vec<f64> = pts.iter().map(|&s| v_of(s)).collect();
+                        for (lo, hi, material) in &g.layers {
+                            let (lo, hi) = (lo.min(*hi), lo.max(*hi));
+                            let piece = clip_by(&pts, |s| v_of(s) - lo);
+                            let piece = clip_by(&piece, |s| hi - v_of(s));
+                            if piece.len() >= 3 && signed_area(&piece).abs() > 1e-12 {
+                                crate::cut::cut_fill(
+                                    &mut d,
+                                    c.project,
+                                    material,
+                                    piece,
+                                    c.spacing,
+                                    Some(solid.element),
+                                );
+                            }
+                        }
+                        // The lines between layers, pens by their function as in plan.
+                        let functions = crate::plan::layer_functions(c.project, g);
+                        for (k, &(_, at, _)) in g.layers.iter().enumerate().take(g.layers.len() - 1) {
+                            let pen = crate::plan::layer_pen(crate::plan::boundary_function(&functions, k));
+                            for (a, b) in level_crossings(&pts, &v, at) {
+                                d.polyline_pen(&[a, b], false, LineStyle::Thin, pen, Some(solid.element));
+                            }
+                        }
+                    }
                     Some(c) => {
                         let ty = c.project.element(solid.element).and_then(|e| c.project.element_type(e.type_id));
                         let material = ty.map_or("", |t| match &t.data {
@@ -634,6 +701,118 @@ pub fn render(
         }
     }
     d
+}
+
+/// The layers of the cut `poly` of a slab whose layers run down from its
+/// top, `fractions` (from 0 to 1) their boundaries as parts of its height:
+/// the pieces of each layer and the lines between each two. The cut is split
+/// into vertical strips at its corners, each column between an edge below
+/// and one above shared out by height; a layer's pieces in neighbouring
+/// strips that meet become one.
+type SlabLayers = (Vec<Vec<Vec<DVec2>>>, Vec<Vec<(DVec2, DVec2)>>);
+fn slab_layers(poly: &[DVec2], fractions: &[f64]) -> SlabLayers {
+    let count = fractions.len().saturating_sub(1);
+    // Each layer's runs: points along its bottom and along its top, left to right.
+    let mut runs: Vec<Vec<(Vec<DVec2>, Vec<DVec2>)>> = vec![Vec::new(); count];
+    let mut lines: Vec<Vec<(DVec2, DVec2)>> = vec![Vec::new(); count.saturating_sub(1)];
+    let mut xs: Vec<f64> = poly.iter().map(|p| p.x).filter(|x| x.is_finite()).collect();
+    xs.sort_by(f64::total_cmp);
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    let edges: Vec<(DVec2, DVec2)> =
+        (0..poly.len()).filter_map(|i| Some((*poly.get(i)?, *poly.get((i + 1) % poly.len())?))).collect();
+    let close = |p: DVec2, q: DVec2| p.distance_squared(q) < 1e-14;
+    for w in xs.windows(2) {
+        let (x0, x1) = (w[0], w[1]);
+        let mut spans: Vec<(f64, f64)> = edges
+            .iter()
+            .filter(|(a, b)| a.x.min(b.x) <= x0 + 1e-9 && a.x.max(b.x) >= x1 - 1e-9 && (a.x - b.x).abs() > 1e-9)
+            .map(|(a, b)| {
+                let y = |x: f64| a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
+                (y(x0), y(x1))
+            })
+            .collect();
+        spans.sort_by(|p, q| (p.0 + p.1).total_cmp(&(q.0 + q.1)));
+        for pair in spans.as_chunks::<2>().0 {
+            let [(b0, b1), (t0, t1)] = *pair;
+            if t0 - b0 < 1e-12 && t1 - b1 < 1e-12 {
+                continue;
+            }
+            // The points at a part `f` of the height down from the top, at both sides.
+            let at = |f: f64| (DVec2::new(x0, t0 - f * (t0 - b0)), DVec2::new(x1, t1 - f * (t1 - b1)));
+            for (k, runs) in runs.iter_mut().enumerate() {
+                let (Some(&fa), Some(&fb)) = (fractions.get(k), fractions.get(k + 1)) else { continue };
+                let ((top0, top1), (low0, low1)) = (at(fa), at(fb));
+                let open = runs.iter_mut().find(|(low, top)| {
+                    low.last().is_some_and(|&p| close(p, low0)) && top.last().is_some_and(|&p| close(p, top0))
+                });
+                match open {
+                    Some((low, top)) => {
+                        low.push(low1);
+                        top.push(top1);
+                    }
+                    None => runs.push((vec![low0, low1], vec![top0, top1])),
+                }
+            }
+            for (k, lines) in lines.iter_mut().enumerate() {
+                let Some(&f) = fractions.get(k + 1) else { continue };
+                let (a, b) = at(f);
+                lines.push((a, b));
+            }
+        }
+    }
+    let pieces = runs
+        .into_iter()
+        .map(|runs| {
+            runs.into_iter()
+                .map(|(mut low, top)| {
+                    low.extend(top.into_iter().rev());
+                    low
+                })
+                .filter(|p| signed_area(p).abs() > 1e-12)
+                .collect()
+        })
+        .collect();
+    (pieces, lines)
+}
+
+/// The part of `poly` where `side` is not negative (Sutherland-Hodgman, the
+/// side taken linear along each edge; a polygon that is not convex may come
+/// out with zero-width bridges along the boundary, which fill nothing).
+fn clip_by(poly: &[DVec2], side: impl Fn(DVec2) -> f64) -> Vec<DVec2> {
+    let sides: Vec<f64> = poly.iter().map(|&p| side(p)).collect();
+    let mut out = Vec::with_capacity(poly.len() + 2);
+    for (i, (&p, &sp)) in poly.iter().zip(&sides).enumerate() {
+        let j = (i + 1) % poly.len();
+        let (Some(&q), Some(&sq)) = (poly.get(j), sides.get(j)) else { continue };
+        if sp >= 0.0 {
+            out.push(p);
+        }
+        if (sp >= 0.0) != (sq >= 0.0) && (sp - sq).abs() > 1e-15 {
+            out.push(p + (q - p) * (sp / (sp - sq)));
+        }
+    }
+    out
+}
+
+/// The stretches of the line where `values` (one per vertex of `poly`, taken
+/// linear along its edges) equal `at` that lie inside `poly`: its crossings,
+/// sorted along the line and paired (even-odd).
+fn level_crossings(poly: &[DVec2], values: &[f64], at: f64) -> Vec<(DVec2, DVec2)> {
+    let mut hits = Vec::new();
+    for i in 0..poly.len() {
+        let j = (i + 1) % poly.len();
+        let (Some(&p), Some(&q), Some(&a), Some(&b)) = (poly.get(i), poly.get(j), values.get(i), values.get(j)) else {
+            continue;
+        };
+        // Half-open, so a vertex on the level counts once.
+        if (a >= at) != (b >= at) && (a - b).abs() > 1e-15 {
+            hits.push(p + (q - p) * ((a - at) / (a - b)));
+        }
+    }
+    let (Some(&first), Some(&last)) = (hits.first(), hits.last()) else { return Vec::new() };
+    let along = (last - first).normalize_or_zero();
+    hits.sort_by(|p, q| p.dot(along).total_cmp(&q.dot(along)));
+    hits.as_chunks::<2>().0.iter().map(|&[a, b]| (a, b)).collect()
 }
 
 /// Depth (along the view direction) of the plane of `f` under screen point `s`.
@@ -865,6 +1044,7 @@ pub fn view_frame(view: &cc_core::View) -> Option<Frame> {
         cc_core::ViewKind::Elevation { direction } => Some(elevation_frame(*direction)),
         cc_core::ViewKind::Section { start, end, depth, .. } => Some(section_frame(*start, *end, *depth)),
         cc_core::ViewKind::ThreeD { camera, .. } => Some(camera_frame(camera)),
+        cc_core::ViewKind::InteriorElevation { .. } => crate::interior::frame(view),
         _ => None,
     }
 }
@@ -882,10 +1062,14 @@ pub fn section(
     scale: u32,
     look: Look<'_>,
 ) -> Drawing2D {
-    let frame = section_frame(start, end, depth);
+    section_in(project, geom, &section_frame(start, end, depth), scale, look)
+}
+
+/// A section through `frame` (its near plane cuts; see [`section`]).
+pub fn section_in(project: &Project, geom: &ModelGeometry, frame: &Frame, scale: u32, look: Look<'_>) -> Drawing2D {
     let cut = CutStyle { project, spacing: crate::cut::spacing(scale) };
-    let mut d = render(geom, &frame, Some(cut), look, &project.fill_patterns);
-    existing_ground(&mut d, geom, &frame);
+    let mut d = render(geom, frame, Some(cut), look, &project.fill_patterns);
+    existing_ground(&mut d, geom, frame);
     d
 }
 
@@ -941,7 +1125,7 @@ pub fn analytical(project: &Project, geom: &ModelGeometry, camera: &CameraState)
     for n in &model.nodes {
         let p = frame.project(n.position);
         let r = 0.08;
-        let marker: Vec<DVec2> = if n.support {
+        let marker: Vec<DVec2> = if n.support.is_some() {
             vec![p, p + DVec2::new(r, -1.6 * r), p + DVec2::new(-r, -1.6 * r)]
         } else {
             (0..8).map(|i| p + DVec2::from_angle(i as f64 * std::f64::consts::FRAC_PI_4) * (r * 0.5)).collect()
@@ -1367,5 +1551,138 @@ mod tests {
             .count();
         assert!(hatch > 0);
         assert!(d.elements_in(DVec2::splat(-100.0), DVec2::splat(100.0), false).contains(&id));
+    }
+
+    #[test]
+    fn section_shows_a_layered_walls_layers_above_the_coarse_level() {
+        let (doc, id) = one_wall();
+        let geom = ModelGeometry::build(&doc.project);
+        let layers = geom.walls.get(&id).map_or(0, |g| g.layers.len());
+        assert!(layers > 1, "the template's wall has finish layers");
+        let line = (DVec2::new(2.0, 2.0), DVec2::new(2.0, -2.0));
+        let between = |d: &Drawing2D| {
+            d.prims
+                .iter()
+                .filter(|p| matches!(p, Prim::Line { style: LineStyle::Thin, element: Some(e), .. } if *e == id))
+                .count()
+        };
+        let fills = |d: &Drawing2D| {
+            d.prims.iter().filter(|p| matches!(p, Prim::Fill { cut: true, element: Some(e), .. } if *e == id)).count()
+        };
+        let medium = section(&doc.project, &geom, line, 5.0, 50, Look::plain());
+        // One fill per layer and one line between each two, across the whole height.
+        assert_eq!(fills(&medium), layers);
+        assert_eq!(between(&medium), layers - 1);
+        for p in &medium.prims {
+            if let Prim::Line { style: LineStyle::Thin, element: Some(e), a, b, .. } = p
+                && *e == id
+            {
+                assert!((a.x - b.x).abs() < 1e-9 && ((a.y - b.y).abs() - 3.0).abs() < 1e-6, "{a} {b}");
+            }
+        }
+        let coarse = section(&doc.project, &geom, line, 5.0, 50, Look { detail: DetailLevel::Coarse, ..Look::plain() });
+        assert_eq!(fills(&coarse), 1);
+        assert_eq!(between(&coarse), 0);
+    }
+}
+
+#[cfg(test)]
+mod slab_layer_tests {
+    use super::*;
+    use crate::Prim;
+    use cc_core::{Category, Document, Element, ElementKind, Floor, Roof, RoofShape};
+
+    fn place(doc: &mut Document, category: Category, kind: ElementKind) -> (ElementId, usize) {
+        doc.edit("t", |e| {
+            let level = e.project().levels[0].id;
+            let type_id = e.project().default_type(category).unwrap();
+            let layers = e.project().element_type(type_id).unwrap().layers().len();
+            let id = ElementId(e.alloc_id());
+            e.add_element(Element {
+                id,
+                level,
+                type_id,
+                mark: String::new(),
+                comments: String::new(),
+                uid: Default::default(),
+                kind,
+                phase_created: Default::default(),
+                phase_demolished: None,
+                design_option: None,
+                paints: Vec::new(),
+                plugin_data: Default::default(),
+            });
+            (id, layers)
+        })
+    }
+
+    fn square() -> Vec<DVec2> {
+        vec![DVec2::new(0.0, -2.0), DVec2::new(4.0, -2.0), DVec2::new(4.0, 2.0), DVec2::new(0.0, 2.0)]
+    }
+
+    fn layer_prims(d: &Drawing2D, id: ElementId) -> (usize, Vec<(DVec2, DVec2)>) {
+        let fills =
+            d.prims.iter().filter(|p| matches!(p, Prim::Fill { cut: true, element: Some(e), .. } if *e == id)).count();
+        let lines = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Line { style: LineStyle::Thin, element: Some(e), a, b, .. } if *e == id => Some((*a, *b)),
+                _ => None,
+            })
+            .collect();
+        (fills, lines)
+    }
+
+    #[test]
+    fn a_floor_cut_in_section_shows_its_layers() {
+        let mut doc = Document::new(Project::from_template());
+        let (id, layers) = place(&mut doc, Category::Floor, ElementKind::Floor(Floor::new(square(), 0.0)));
+        assert!(layers > 1, "the template's floor has a screed over its slab");
+        let geom = ModelGeometry::build(&doc.project);
+        let line = (DVec2::new(2.0, 3.0), DVec2::new(2.0, -3.0));
+        let (fills, lines) = layer_prims(&section(&doc.project, &geom, line, 5.0, 20, Look::plain()), id);
+        assert_eq!(fills, layers);
+        assert_eq!(lines.len(), layers - 1);
+        // The line under the top layer runs level across the whole floor, its thickness below the top.
+        let ty = doc.project.element_type(doc.project.element(id).unwrap().type_id).unwrap();
+        let top = ty.layers()[0].thickness;
+        let (a, b) = lines[0];
+        assert!((a.y - b.y).abs() < 1e-9 && ((a.x - b.x).abs() - 4.0).abs() < 1e-9, "{a} {b}");
+        let floor_top = d_top(&doc, &geom, line, id);
+        assert!((floor_top - a.y - top).abs() < 1e-9, "{floor_top} {a}");
+        let coarse = Look { detail: DetailLevel::Coarse, ..Look::plain() };
+        let (fills, lines) = layer_prims(&section(&doc.project, &geom, line, 5.0, 20, coarse), id);
+        assert_eq!((fills, lines.len()), (1, 0));
+    }
+
+    /// The highest point of the element's cut outline.
+    fn d_top(doc: &Document, geom: &ModelGeometry, line: (DVec2, DVec2), id: ElementId) -> f64 {
+        let d = section(&doc.project, geom, line, 5.0, 20, Look::plain());
+        d.prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Line { style: LineStyle::Cut, element: Some(e), a, b, .. } if *e == id => Some(a.y.max(b.y)),
+                _ => None,
+            })
+            .fold(f64::NEG_INFINITY, f64::max)
+    }
+
+    #[test]
+    fn a_pitched_roof_cut_in_section_shows_its_layers_along_its_slopes() {
+        let mut doc = Document::new(Project::from_template());
+        let shape = RoofShape::Gable { slope: 0.5, ridge_deg: 0.0 };
+        let (id, layers) = place(&mut doc, Category::Roof, ElementKind::Roof(Roof::new(square(), 3.0, 0.5, shape)));
+        assert!(layers > 1, "the template's roof has a covering over its deck");
+        let geom = ModelGeometry::build(&doc.project);
+        let line = (DVec2::new(2.0, 4.0), DVec2::new(2.0, -4.0));
+        let (fills, lines) = layer_prims(&section(&doc.project, &geom, line, 5.0, 20, Look::plain()), id);
+        // Both slopes of a layer meet at the ridge: one piece each.
+        assert_eq!(fills, layers);
+        assert!(!lines.is_empty());
+        for (a, b) in lines {
+            let rise = ((b.y - a.y) / (b.x - a.x)).abs();
+            assert!((rise - 0.5).abs() < 1e-6, "{a} {b}");
+        }
     }
 }

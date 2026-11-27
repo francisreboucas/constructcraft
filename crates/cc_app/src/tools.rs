@@ -33,6 +33,9 @@ pub enum Tool {
     Section,
     /// Draw a callout's rectangle in a plan, section or elevation.
     Callout,
+    /// Place an interior elevation marker in a space of a floor plan (see
+    /// [`crate::interior_ui`]).
+    InteriorElevation,
     /// Draw detail lines in the active 2D view (mode and style in
     /// `AppState::detail`, see [`crate::detail_ui`]).
     DetailLine,
@@ -210,6 +213,7 @@ impl Tool {
             Tool::Sketch { .. } => "tool-floor",
             Tool::Section => "tool-section",
             Tool::Callout => "tool-callout",
+            Tool::InteriorElevation => "tool-interior-elevation",
             Tool::Room { .. } => "tool-room",
             Tool::Grid { .. } => "tool-grid",
             Tool::Dimension { mode, .. } => mode.key(),
@@ -447,6 +451,7 @@ impl Tool {
             | Category::Truss
             | Category::Bracing
             | Category::Connection
+            | Category::InteriorMarker
             | Category::WallFraming => return None,
             // Made with their caps or by commands.
             Category::Pile => return None,
@@ -699,6 +704,8 @@ pub struct Interaction {
     pub level_menu: Option<(ViewId, LevelId)>,
     /// The view whose right-click menu of the selection (or of the view) is open (see [`crate::context_menu`]).
     pub element_menu: Option<ViewId>,
+    /// The view whose right-click menu of the active tool is open (see [`crate::context_menu::tool`]).
+    pub tool_menu: Option<ViewId>,
     /// Tab cycling the Select tool's pre-selection (issue #406).
     pub tab: crate::preselect::TabCycle,
 }
@@ -1795,6 +1802,7 @@ pub fn handle(
             }
         }
         (Tool::Room { type_id }, Some(level)) => room_tool(resp, painter, state, level, *type_id, xf),
+        (Tool::InteriorElevation, Some(level)) => crate::interior_ui::tool(resp, painter, state, level, xf),
         (Tool::Grid { type_id }, Some(level)) => grid_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Column { type_id, .. }, Some(level)) => column_tool(ui, resp, painter, state, level, *type_id, xf),
         (Tool::Beam { type_id, .. }, Some(level)) => beam_tool(ui, resp, painter, state, level, *type_id, xf),
@@ -4681,6 +4689,14 @@ fn select(
 ) {
     // Callout and section marks first: they lie over the model.
     if crate::callout_ui::select(ui, resp, painter, state, xf, drawing) {
+        return;
+    }
+    // A double click on an interior elevation marker's arrow opens its view.
+    if crate::interior_ui::open_arrow(resp, state, xf, drawing) {
+        return;
+    }
+    // A double click on a section mark or an elevation marker opens its view.
+    if crate::section_mark::open(resp, state, xf, drawing) {
         return;
     }
     if movable && crate::section_mark::select(ui, resp, painter, state, xf, drawing) {

@@ -426,16 +426,40 @@ pub(crate) fn align_edge(state: &AppState, id: ElementId, at: DVec2) -> Option<(
     }
 }
 
+/// The active view when it is an elevation or a section (looking level),
+/// where Align works by the lines drawn in it rather than in plan.
+fn level_view(state: &AppState) -> Option<cc_core::ViewId> {
+    use cc_core::ViewKind::*;
+    let view = state.project().view(state.active_view?)?;
+    matches!(view.kind, Elevation { .. } | Section { .. } | InteriorElevation { .. }).then_some(view.id)
+}
+
+/// The line Align uses when `id` is picked at `at` in a 2D view: in an
+/// elevation or a section the drawn line nearest to it, in plan [`align_edge`].
+fn align_edge_2d(state: &AppState, drawing: &Drawing2D, id: ElementId, at: DVec2) -> Option<(DVec2, DVec2)> {
+    match level_view(state) {
+        Some(_) => cc_engine::commands::modify::view_align_line(drawing, id, at),
+        None => align_edge(state, id, at),
+    }
+}
+
 /// The color of Align's reference line.
 const ALIGN_REFERENCE: egui::Color32 = egui::Color32::from_rgb(220, 38, 38);
 
 /// Align's feedback: the line under the pointer that a click picks, and
 /// once the reference is chosen, its line across the view, dashed in red.
-fn align_feedback(painter: &Painter, xf: &Xf, state: &AppState, hovered: Option<ElementId>, raw: DVec2) {
+fn align_feedback(
+    painter: &Painter,
+    xf: &Xf,
+    state: &AppState,
+    drawing: &Drawing2D,
+    hovered: Option<ElementId>,
+    raw: DVec2,
+) {
     let first = state.interaction.targets.first().copied();
     let first_pick = state.interaction.points.first().copied();
     if let (Some(r), Some(rp)) = (first, first_pick)
-        && let Some((a, b)) = align_edge(state, r, rp)
+        && let Some((a, b)) = align_edge_2d(state, drawing, r, rp)
     {
         let reach = (painter.clip_rect().size().length() as f64 / xf.scale.max(1e-9)).max(1.0);
         let d = (b - a).normalize_or_zero() * reach;
@@ -444,24 +468,27 @@ fn align_feedback(painter: &Painter, xf: &Xf, state: &AppState, hovered: Option<
         painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(3.0, ALIGN_REFERENCE));
     }
     if let Some(id) = hovered
-        && let Some((a, b)) = align_edge(state, id, raw)
+        && let Some((a, b)) = align_edge_2d(state, drawing, id, raw)
     {
         painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(3.0, PREVIEW));
     }
 }
 
-/// Align `id` (picked at `pick`) onto `reference` (picked at `reference_pick`), in plan.
+/// Align `id` (picked at `pick`) onto `reference` (picked at
+/// `reference_pick`): plan points, or points of `view` (an elevation or a section).
 pub(crate) fn align_command(
     id: ElementId,
     pick: DVec2,
     reference: ElementId,
     reference_pick: DVec2,
+    view: Option<cc_core::ViewId>,
 ) -> cmd::ElementAlign {
     cmd::ElementAlign {
         id: id.0,
         reference: reference.0,
         pick: Some(pick.to_array()),
         reference_pick: Some(reference_pick.to_array()),
+        view: view.map(|v| cc_engine::Ref::Id(v.0)),
     }
 }
 
@@ -715,7 +742,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
     lit.extend(hovered_id);
     paint_ghost(painter, xf, drawing, &lit, &PlanTransform::IDENTITY);
     if *tool == Tool::Align {
-        align_feedback(painter, xf, state, hovered_id, raw);
+        align_feedback(painter, xf, state, drawing, hovered_id, raw);
     }
     let clicked = resp.clicked();
     // Pinned elements are not edited (offset only copies, so it may pick them).
@@ -751,7 +778,7 @@ fn pick_tool(resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, 
                             state,
                             cmd::TrimCorner { a: a.0, pick_a: pick_a.to_array(), b: id.0, pick_b: raw.to_array() },
                         ),
-                        Tool::Align => report(state, align_command(id, raw, a, pick_a)),
+                        Tool::Align => report(state, align_command(id, raw, a, pick_a, level_view(state))),
                         _ => report(state, cmd::TrimExtend { id: id.0, pick: raw.to_array(), reference: a.0 }),
                     }
                     // Trim/extend keeps its reference for more elements.

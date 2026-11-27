@@ -114,6 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 height: 3.0,
                 top: up,
                 structural: true,
+                base_support: Default::default(),
             };
             add(e, column_t, "", ElementKind::Column(column));
         }

@@ -65,11 +65,11 @@ The detailed notes (types, functions, invariants, commands and app entry points 
 - [`docs/architecture/geometry.md`](docs/architecture/geometry.md) — cc_geom, cc_render, Joined pieces.
 - [`docs/architecture/walls.md`](docs/architecture/walls.md) — Curtain walls, Wall profiles, Spline walls, Niches, Wall flip, Wall draw shapes. 
 - [`docs/architecture/elements.md`](docs/architecture/elements.md) — Sketches, Roof coverings and framing, Roof joins, Conceptual masses, Terrain, Building pads, Shafts, Swept profiles.
-- [`docs/architecture/structure.md`](docs/architecture/structure.md) — Piles and pile caps, Structural profiles, Structure by material, Steel buildings, Member hosts and trusses, Bracing, Wall framing, Connections.
+- [`docs/architecture/structure.md`](docs/architecture/structure.md) — Piles and pile caps, Structural profiles, Structure by material, Steel buildings, Member hosts and trusses, Bracing, Wall framing, Connections, Analytical model.
 - [`docs/architecture/reinforcement.md`](docs/architecture/reinforcement.md) — Bar marks and bending schedule, Reinforcement in plans, elevations and sections, Wall reinforcement, Slab reinforcement, Strip footings with a beam and curved rafts, Pile caps and piles.
 - [`docs/architecture/mep.md`](docs/architecture/mep.md) — MEP, Run tags and fitting labels, Pipe series, Pipe Catalog (app).
 - [`docs/architecture/interop.md`](docs/architecture/interop.md) — cc_ifc, Imported CAD drawings, cc_skp, glTF export, cc_rvt.
-- [`docs/architecture/views.md`](docs/architecture/views.md) — cc_views, Schedule definitions, Phases, Design options, Detail levels, Visual styles, View graphics, Drafting views, Callouts and detail views, Browser organization.
+- [`docs/architecture/views.md`](docs/architecture/views.md) — cc_views, Schedule definitions, Phases, Design options, Detail levels, Visual styles, View graphics, Drafting views, Callouts and detail views, Interior elevations, Browser organization.
 - [`docs/architecture/annotation.md`](docs/architecture/annotation.md) — Dimensions, Tags, Level marks, Level heads, Detail lines, Line styles and regions, Fill patterns, Detail components, Title blocks.
 - [`docs/architecture/site-sun-render.md`](docs/architecture/site-sun-render.md) — Site location, Sun studies, Rendering.
 - [`docs/architecture/app.md`](docs/architecture/app.md) — cc_app, Online component library (3D CraftHouse), Component thumbnails, Plugin command forms, Plugins tab and plugin settings, Plugin console, reload and developer mode, Plugin jobs and external programs.

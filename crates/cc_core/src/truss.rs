@@ -660,6 +660,7 @@ impl Truss {
                     height,
                     top: WallTop::Unconnected,
                     structural: true,
+                    base_support: Default::default(),
                 };
                 out.push(TrussRoleKind::Vertical, k, i, self.post_type, ElementKind::Column(column));
             }

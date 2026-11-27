@@ -732,6 +732,26 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
                         }
                     });
                 }
+                if c.structural {
+                    let mut support = c.base_support;
+                    row(ui, &t!("prop-base-support"), |ui| {
+                        egui::ComboBox::from_id_salt(("base-support", id.0)).selected_text(tr(support.key())).show_ui(
+                            ui,
+                            |ui| {
+                                for s in cc_core::BaseSupport::ALL {
+                                    ui.selectable_value(&mut support, s, tr(s.key()));
+                                }
+                            },
+                        );
+                    });
+                    if support != c.base_support {
+                        crate::engine_edit::element(state, id, None, |x| {
+                            if let ElementKind::Column(c) = &mut x.kind {
+                                c.base_support = support;
+                            }
+                        });
+                    }
+                }
             });
             section(ui, "dimensions", t!("section-dimensions"), |ui| {
                 let (base, top) = state.project().column_span(&el, c);
@@ -1095,6 +1115,7 @@ fn element_props(ui: &mut Ui, state: &mut AppState, id: ElementId) {
         ElementKind::LevelMark(m) => crate::level_mark_ui::props(ui, state, id, m),
         // Placed and changed through bar_tag_create and element_set.
         ElementKind::BarTag(_) => {}
+        ElementKind::InteriorMarker(m) => crate::interior_ui::props(ui, state, id, m),
         ElementKind::CadImport(c) => crate::cad_ui::props(ui, state, id, c),
         ElementKind::DetailLine(l) => crate::detail_ui::props(ui, state, id, l),
         ElementKind::DetailComponent(c) => crate::detail_component_ui::props(ui, state, id, c),
@@ -3517,6 +3538,7 @@ fn view_sections(ui: &mut Ui, state: &mut AppState, id: ViewId) {
         | ViewKind::Drafting { .. }
         | ViewKind::Elevation { .. }
         | ViewKind::Diagram { .. } => {}
+        ViewKind::InteriorElevation { .. } => crate::interior_ui::view_rows(ui, state, id),
     }
     // The tag types of plans, the mark type of sections and elevations.
     crate::tag_type_ui::view_rows(ui, state, id);

@@ -235,6 +235,10 @@ impl Element {
                 }
             }
             ElementKind::Shaft(s) => s.outline.iter_mut().for_each(p),
+            ElementKind::InteriorMarker(m) => {
+                p(&mut m.position);
+                m.rotation_deg = t.apply_angle_deg(m.rotation_deg);
+            }
             ElementKind::SteelBuilding(b) => b.transform(t),
             ElementKind::Truss(tr) => tr.transform(t),
             ElementKind::Bracing(b) => b.transform(t),

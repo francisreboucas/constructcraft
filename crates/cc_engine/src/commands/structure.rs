@@ -184,6 +184,7 @@ impl Command for ColumnsAtGrids {
                 height: positive(self.height.unwrap_or_else(|| p.level_height(level, p.defaults().story)), "height")?,
                 top: top(p, self.top_level.as_ref(), self.top_offset)?.unwrap_or_else(|| default_top(p, level)),
                 structural: self.structural.unwrap_or(true),
+                base_support: Default::default(),
             })
         };
         let existing = columns_on(p, level);

@@ -52,6 +52,22 @@ fn segment_length(s: &SectionHandle, at_start: bool, p: DVec2) -> f64 {
     (p - head).dot(dir).clamp(s.head, max.min(cc_core::MAX_SECTION_SEGMENT))
 }
 
+/// A double click on a section mark or an elevation marker opens its view
+/// (also when it follows a click so closely that it counts as a triple one).
+/// Returns whether it did.
+pub fn open(resp: &Response, state: &mut AppState, xf: &Xf, drawing: &Drawing2D) -> bool {
+    if !(resp.double_clicked() || resp.triple_clicked()) {
+        return false;
+    }
+    let Some(p) = resp.hover_pos().map(|p| xf.to_world(p)) else { return false };
+    let tol = 5.0 / xf.scale.max(1e-9);
+    let view = drawing.section_at(p, tol).map(|h| h.view).or_else(|| drawing.mark_at(p).map(|m| m.view));
+    let Some(view) = view.filter(|v| state.project().view(*v).is_some()) else { return false };
+    state.interaction.drag = None;
+    state.open_view(view);
+    true
+}
+
 /// Section marks under the Select tool in a plan. Returns `true` when they
 /// took the pointer this frame (the element selection is left alone).
 pub fn select(ui: &Ui, resp: &Response, painter: &Painter, state: &mut AppState, xf: &Xf, drawing: &Drawing2D) -> bool {

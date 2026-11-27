@@ -420,11 +420,11 @@ const PDF_IMAGE_SIDE: u32 = 6000;
 
 const INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
 
-/// A composite font whose character codes are Inter's TrueType glyph indices.
-/// The ToUnicode map restores the original characters when copying PDF text.
+/// A composite font with a code per character. Characters sharing an Inter glyph
+/// still need distinct ToUnicode entries (for example, the two Ukrainian apostrophes).
 struct PdfUnicodeFont {
     font: skrifa::FontRef<'static>,
-    glyphs: BTreeMap<u32, (char, f64)>,
+    glyphs: BTreeMap<char, (usize, u16, f64)>,
 }
 
 impl PdfUnicodeFont {
@@ -444,32 +444,41 @@ impl PdfUnicodeFont {
                 Some(glyph) => (c, glyph),
                 None => ('?', map.map('?').unwrap_or(skrifa::GlyphId::NOTDEF)),
             };
-            let id = glyph.to_u32();
-            let (_, advance) =
-                self.glyphs.entry(id).or_insert_with(|| (c, widths.advance_width(glyph).unwrap_or(0.0) as f64));
+            // CID 0 maps to .notdef. The embedded font's character map bounds the
+            // number of codes, and TrueType glyph indices fit in two bytes.
+            let next_cid = self.glyphs.len() + 1;
+            let (cid, _, advance) = self.glyphs.entry(c).or_insert_with(|| {
+                let index = u16::try_from(glyph.to_u32()).unwrap_or(0);
+                let advance = widths.advance_width(glyph).unwrap_or(0.0) as f64;
+                (next_cid, index, advance)
+            });
             width += *advance;
-            let _ = write!(encoded, "{id:04X}");
+            let _ = write!(encoded, "{cid:04X}", cid = *cid);
         }
         encoded.push('>');
         (encoded.into_bytes(), width / 1000.0)
     }
 
-    fn objects(self, first: usize) -> [Vec<u8>; 5] {
+    fn objects(self, first: usize) -> [Vec<u8>; 6] {
         use skrifa::MetadataProvider;
         use skrifa::instance::{LocationRef, Size};
-        let (cid_font, descriptor, font_file, to_unicode) = (first + 1, first + 2, first + 3, first + 4);
+        let (cid_font, descriptor, font_file, to_unicode, cid_to_gid) =
+            (first + 1, first + 2, first + 3, first + 4, first + 5);
         let metrics = self.font.metrics(Size::new(1000.0), LocationRef::default());
         let bounds = metrics.bounds.unwrap_or_default();
-        let widths: String = self.glyphs.iter().map(|(id, (_, width))| format!("{id} [{}] ", num(*width))).collect();
+        let mut glyphs: Vec<_> = self.glyphs.into_iter().collect();
+        glyphs.sort_unstable_by_key(|(_, (cid, _, _))| *cid);
+        let widths = glyphs.iter().map(|(_, (_, _, width))| num(*width)).collect::<Vec<_>>().join(" ");
+        let mut glyph_map = vec![0, 0];
+        glyph_map.extend(glyphs.iter().flat_map(|(_, (_, glyph, _))| glyph.to_be_bytes()));
         let mut cmap = String::from(
             "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
         );
-        let glyphs: Vec<_> = self.glyphs.into_iter().collect();
         // A CMap operator takes at most 100 mappings per block.
         for chunk in glyphs.chunks(100) {
             let _ = writeln!(cmap, "{} beginbfchar", chunk.len());
-            for (id, (c, _)) in chunk {
-                let _ = write!(cmap, "<{id:04X}> <");
+            for (c, (cid, _, _)) in chunk {
+                let _ = write!(cmap, "<{cid:04X}> <");
                 for code in c.encode_utf16(&mut [0; 2]) {
                     let _ = write!(cmap, "{code:04X}");
                 }
@@ -487,7 +496,7 @@ impl PdfUnicodeFont {
         let compressed = miniz_oxide::deflate::compress_to_vec_zlib(INTER, 6);
         [
             format!("<< /Type /Font /Subtype /Type0 /BaseFont /Inter-Regular /Encoding /Identity-H /DescendantFonts [{cid_font} 0 R] /ToUnicode {to_unicode} 0 R >>").into_bytes(),
-            format!("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Inter-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {descriptor} 0 R /CIDToGIDMap /Identity /W [{widths}] >>").into_bytes(),
+            format!("<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Inter-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {descriptor} 0 R /CIDToGIDMap {cid_to_gid} 0 R /W [1 [{widths}]] >>").into_bytes(),
             format!(
                 "<< /Type /FontDescriptor /FontName /Inter-Regular /Flags 4 /FontBBox [{} {} {} {}] /ItalicAngle 0 /Ascent {} /Descent {} /CapHeight {} /StemV 80 /FontFile2 {font_file} 0 R >>",
                 num(bounds.x_min as f64), num(bounds.y_min as f64), num(bounds.x_max as f64), num(bounds.y_max as f64),
@@ -495,6 +504,7 @@ impl PdfUnicodeFont {
             ).into_bytes(),
             stream(&format!(" /Filter /FlateDecode /Length1 {}", INTER.len()), &compressed),
             stream("", cmap.as_bytes()),
+            stream("", &glyph_map),
         ]
     }
 }
@@ -642,6 +652,7 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
             callouts: Vec::new(),
             marks: Vec::new(),
             bubbles: Vec::new(),
+            interior_arrows: Vec::new(),
             levels: Vec::new(),
             underlay: drawing.underlay,
             overlay: drawing.overlay,
@@ -855,7 +866,11 @@ endstream",
     /// language, so it can be read and copied instead of turning into `?`.
     #[test]
     fn pdf_keeps_cyrillic_text() {
-        for label in ["Гостиная 101 (м²)", "Площа (м²): ґанок, їдальня, Євро"] {
+        for label in [
+            "Гостиная 101 (м²)",
+            "Площа (м²): ґанок, їдальня, Євро",
+            "Room № 3 — Обʼєм (м³) · п’ять…",
+        ] {
             let mut d = Drawing2D::default();
             d.text_at(DVec2::new(10.0, 10.0), "Room", 3.0, Anchor::Center, 0.0);
             d.text_at(DVec2::new(10.0, 20.0), label, 3.0, Anchor::Center, 0.0);

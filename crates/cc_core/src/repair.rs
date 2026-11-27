@@ -101,6 +101,7 @@ fn element_is_valid(e: &Element) -> bool {
         ElementKind::Mass(m) => m.is_valid(),
         ElementKind::Sweep(s) => s.is_valid(),
         ElementKind::Shaft(s) => s.is_valid() && top_ok(s.top),
+        ElementKind::InteriorMarker(m) => m.is_valid(),
         // Out-of-range values are reset by `repair_member_hosts`, which keeps the members.
         ElementKind::SteelBuilding(_) => true,
         ElementKind::Truss(t) => t.start.is_finite() && t.end.is_finite(),
@@ -221,6 +222,7 @@ impl Project {
                 | TypeData::MaskingRegion {}
                 | TypeData::Mass { .. }
                 | TypeData::Shaft {}
+                | TypeData::InteriorMarker {}
                 | TypeData::SteelBuilding {}
                 | TypeData::Truss {}
                 | TypeData::Bracing {}
@@ -963,6 +965,7 @@ impl Project {
             }
         }
 
+        repairs += self.repair_interior();
         repairs += self.repair_callouts();
 
         // View graphics: filters, templates and the elements they refer to.

@@ -178,6 +178,7 @@ fn sector_column_with_bars() -> (Project, ElementId, ElementId, ElementId) {
         height: 3.0,
         top: WallTop::Unconnected,
         structural: true,
+        base_support: Default::default(),
     };
     let column = add(&mut p, type_id, ElementKind::Column(column));
     let thin = bar_type(&p, 0.005);

@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod analytical_arcs;
+mod analytical_supports;
 mod arc_beams;
 mod arc_strip_footings;
 mod bar_marks;
@@ -40,6 +41,7 @@ mod graph;
 mod graphics;
 mod image;
 mod imperial_text;
+mod interior_elevations;
 mod jobs;
 mod level_heads;
 mod level_heights;

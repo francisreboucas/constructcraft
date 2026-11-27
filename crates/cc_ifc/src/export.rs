@@ -2415,6 +2415,7 @@ impl<'a> Exporter<'a> {
             | TypeData::MaskingRegion {}
             | TypeData::Mass { .. }
             | TypeData::Shaft {}
+            | TypeData::InteriorMarker {}
             | TypeData::SteelBuilding {}
             | TypeData::Truss {}
             | TypeData::Bracing {}

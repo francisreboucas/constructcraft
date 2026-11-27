@@ -31,7 +31,7 @@ fn column_state(c: &Column, cut_z: f64) -> ColumnCut {
 
 /// The functions of a wall's layers, in the order of [`WallGeom::layers`]
 /// (empty when its type's layers do not match them).
-fn layer_functions(project: &Project, g: &WallGeom) -> Vec<LayerFunction> {
+pub(crate) fn layer_functions(project: &Project, g: &WallGeom) -> Vec<LayerFunction> {
     let ty = project.element(g.element).and_then(|e| project.element_type(e.type_id));
     let functions: Vec<LayerFunction> = ty.map(|t| t.layers().iter().map(|l| l.function).collect()).unwrap_or_default();
     if functions.len() == g.layers.len() { functions } else { Vec::new() }
@@ -40,7 +40,7 @@ fn layer_functions(project: &Project, g: &WallGeom) -> Vec<LayerFunction> {
 /// The subcategory of the line between layers `k` and `k + 1` (#452): the
 /// core's when either is structure, else that of the one nearer the core
 /// (nearer the middle of the wall when it has none).
-fn boundary_function(functions: &[LayerFunction], k: usize) -> Option<LayerFunction> {
+pub(crate) fn boundary_function(functions: &[LayerFunction], k: usize) -> Option<LayerFunction> {
     let (a, b) = (*functions.get(k)?, *functions.get(k + 1)?);
     if a == b || a == LayerFunction::Structure {
         return Some(a);
@@ -58,7 +58,7 @@ fn boundary_function(functions: &[LayerFunction], k: usize) -> Option<LayerFunct
 }
 
 /// A pen that only says which layer function a line belongs to.
-fn layer_pen(function: Option<LayerFunction>) -> Option<crate::Pen> {
+pub(crate) fn layer_pen(function: Option<LayerFunction>) -> Option<crate::Pen> {
     function.map(|f| crate::Pen { layer: Some(f), ..Default::default() })
 }
 
@@ -249,6 +249,9 @@ pub(crate) fn plan_drawing(
                 elevation_mark(&mut d, project, v, (lo, hi), direction.look(), (scale, offset));
             }
         }
+    }
+    if !ceiling {
+        crate::interior::marks(&mut d, project, geom, level, scale);
     }
     d
 }
@@ -1644,6 +1647,7 @@ mod tests {
                 height: 3.0,
                 top: cc_core::WallTop::Unconnected,
                 structural: true,
+                base_support: Default::default(),
             };
             e.add_element(element(col, column_t, ElementKind::Column(column)));
             let id = ElementId(e.alloc_id());
@@ -1771,6 +1775,7 @@ mod tests {
                 height: 3.0,
                 top: Default::default(),
                 structural,
+                base_support: Default::default(),
             });
             e.add_element(element(c, column_t, kind));
             if joined {

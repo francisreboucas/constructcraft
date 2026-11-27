@@ -117,11 +117,12 @@ impl Projection {
 }
 
 impl View {
-    /// The projection of an elevation or section view.
+    /// The projection of an elevation, interior elevation or section view.
     pub fn projection(&self) -> Option<Projection> {
         let (origin, look) = match &self.kind {
             ViewKind::Elevation { direction } => (DVec2::ZERO, direction.look()),
             ViewKind::Section { start, end, .. } => (*start, -(*end - *start).try_normalize()?.perp()),
+            ViewKind::InteriorElevation { origin, look, .. } => (*origin, look.try_normalize()?),
             _ => return None,
         };
         // The view's right: the look direction crossed with up.

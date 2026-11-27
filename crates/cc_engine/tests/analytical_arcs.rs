@@ -59,7 +59,7 @@ fn a_quarter_ring_beam_exports_the_arc_length() {
     let path = scratch("quarter.analytical.json");
     run(&mut s, "analytical_export", json!({"path": path}));
     let m: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    assert_eq!(m["version"], json!(3));
+    assert_eq!(m["version"], json!(4));
     let members = members_of(&m, ring);
     assert_eq!(members.len(), 1, "{m}");
     let member = &members[0];

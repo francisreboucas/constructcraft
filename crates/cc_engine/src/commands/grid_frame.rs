@@ -206,6 +206,7 @@ fn layout(
                     height: (p.level_elevation(upper) - p.level_elevation(lower)).max(0.1),
                     top: WallTop::Level { level: upper, offset: 0.0 },
                     structural: true,
+                    base_support: Default::default(),
                 },
             ));
         }

@@ -241,6 +241,10 @@ pub enum UiCommand {
     Section,
     /// Draw a callout: a detail view of a region of the active view.
     Callout,
+    /// Place an interior elevation marker in a space of the active plan.
+    InteriorElevation,
+    /// Interior elevations of the selected rooms, a marker at each room's point.
+    RoomInteriorElevations,
     Elevations,
     Legend,
     DraftingView,
@@ -480,6 +484,8 @@ impl UiCommand {
             New3D,
             Section,
             Callout,
+            InteriorElevation,
+            RoomInteriorElevations,
             Elevations,
             Legend,
             DraftingView,
@@ -691,6 +697,7 @@ impl UiCommand {
             CeilingPlan => Icon::CeilingPlan,
             Section => Icon::Section,
             Callout => Icon::Callout,
+            InteriorElevation | RoomInteriorElevations => Icon::Elevation,
             Elevations => Icon::Elevation,
             Legend => Icon::Legend,
             DraftingView => Icon::DraftingView,
@@ -931,6 +938,8 @@ impl UiCommand {
             New3D => t!("view-new-3d"),
             Section => t!("tool-section"),
             Callout => t!("tool-callout"),
+            InteriorElevation => t!("tool-interior-elevation"),
+            RoomInteriorElevations => t!("cmd-room-interior-elevations"),
             Elevations => t!("view-elevations"),
             Legend => t!("view-new-legend"),
             DraftingView => t!("view-new-drafting"),
@@ -1178,6 +1187,8 @@ impl UiCommand {
             New3D => t!("cmd-desc-new-3d"),
             Section => t!("cmd-desc-section"),
             Callout => t!("cmd-desc-callout"),
+            InteriorElevation => t!("cmd-desc-interior-elevation"),
+            RoomInteriorElevations => t!("cmd-desc-room-interior-elevations"),
             Elevations => t!("cmd-desc-elevations"),
             Legend => t!("cmd-desc-legend"),
             DraftingView => t!("cmd-desc-drafting"),
@@ -1484,6 +1495,7 @@ impl UiCommand {
             MatchType => "elements_set_type",
             FloorPlan | CeilingPlan | New3D | Section | Legend | DraftingView | Schedule | Sheet => "view_create",
             Callout => "callout_create",
+            InteriorElevation | RoomInteriorElevations => "interior_elevations_create",
             ProjectInfo => "project_info_set",
             SiteLocation => "site_set",
             VisibilityGraphics => "view_graphics_set",
@@ -1633,6 +1645,12 @@ impl UiCommand {
             Text if Tool::for_category(project, Category::Text).is_none() => Some(t!("msg-no-type")),
             LevelMarkPlan if !active_view_is(state, cc_core::View::is_plan) => Some(t!("msg-open-plan")),
             Callout if !active_view_is(state, |v| v.kind.croppable()) => Some(t!("why-callout-view")),
+            InteriorElevation if !active_view_is(state, |v| matches!(v.kind, cc_core::ViewKind::FloorPlan { .. })) => {
+                Some(t!("msg-open-plan"))
+            }
+            RoomInteriorElevations if crate::interior_ui::selected_rooms(state).is_empty() => {
+                Some(t!("why-select-rooms"))
+            }
             LevelMarkSection if !active_view_is(state, |v| v.projection().is_some()) => Some(t!("why-open-section")),
             AddLeader if crate::ribbon::selected_text(state).is_none() && !self.selected(state) => {
                 Some(t!("why-select-text"))
@@ -1832,6 +1850,7 @@ impl UiCommand {
             CurtainGrid => *tool == Tool::CurtainGrid,
             Section => *tool == Tool::Section,
             Callout => *tool == Tool::Callout,
+            InteriorElevation => *tool == Tool::InteriorElevation,
             FoundationSlab => matches!(tool, Tool::Sketch { category: Category::Foundation, .. }),
             MacroRecord => state.session.is_recording(),
             ActiveOption => state.project().active_option().is_some(),
@@ -1915,6 +1934,7 @@ fn place_label(category: Category) -> String {
         Category::CadImport => t!("action-import-cad"),
         Category::Mass => t!("tool-mass"),
         Category::Shaft => t!("tool-shaft"),
+        Category::InteriorMarker => t!("tool-interior-elevation"),
         Category::SteelBuilding => t!("category-steel-building"),
         Category::Truss => t!("category-truss"),
         Category::Bracing => t!("category-bracing"),
@@ -1967,6 +1987,7 @@ fn place_description(category: Category) -> String {
         Category::CadImport => t!("cmd-desc-import-cad"),
         Category::Mass => t!("cmd-desc-mass"),
         Category::Shaft => t!("cmd-desc-shaft"),
+        Category::InteriorMarker => t!("cmd-desc-interior-elevation"),
         Category::SteelBuilding => t!("cmd-desc-steel-building"),
         Category::Truss => t!("cmd-desc-truss"),
         Category::Bracing => t!("cmd-desc-bracing"),
@@ -2081,6 +2102,7 @@ pub fn contextual(state: &AppState) -> Vec<(String, Vec<UiCommand>)> {
             Category::Grid => &[AlignGridEnds],
             Category::Sweep => &[EditProfile],
             Category::Text => &[AddLeader],
+            Category::Room => &[RoomInteriorElevations],
             _ => &[],
         });
         // Components (not detail ones) open in the component editor.
@@ -2407,6 +2429,11 @@ pub fn run(state: &mut AppState, ctx: &egui::Context, command: UiCommand) {
             state.set_tool(Tool::Callout);
             state.message = t!("msg-callout-hint");
         }
+        InteriorElevation => {
+            state.set_tool(Tool::InteriorElevation);
+            state.message = t!("hint-interior-elevation");
+        }
+        RoomInteriorElevations => crate::interior_ui::for_selected_rooms(state),
         Elevations => {
             let first = state.project().views_of(ViewCategory::Elevation).next().map(|v| v.id);
             if let Some(id) = first {

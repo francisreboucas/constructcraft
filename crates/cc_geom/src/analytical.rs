@@ -8,11 +8,13 @@
 //! follow its arc: each carries the bulge of its own part of the arc, nodes
 //! where other members connect lie on the arc, and its length is the arc's;
 //! [`AnalyticalModel::split_arcs`] turns them into straight members for
-//! programs that only take those.
+//! programs that only take those. A column whose top only beams frame into,
+//! within their depth, ends on the highest beam's axis, so no piece of column
+//! is left standing above the joint.
 
 use crate::{BeamEnd, ModelGeometry};
 use cc_core::arc::Arc;
-use cc_core::{ElementId, ElementKind, Project, TypeData};
+use cc_core::{BaseSupport, ElementId, ElementKind, Project, TypeData};
 use glam::{DVec2, DVec3};
 
 /// Points closer than this are one node (1 cm).
@@ -31,8 +33,9 @@ pub enum MemberKind {
 pub struct Node {
     pub id: usize,
     pub position: DVec3,
-    /// The base of a column: where the structure rests on its supports.
-    pub support: bool,
+    /// The base of a column, where the structure rests on a support, and
+    /// what holds it there.
+    pub support: Option<BaseSupport>,
 }
 
 /// A member between two nodes, straight or (part of an arc beam) a circular
@@ -109,7 +112,7 @@ impl AnalyticalModel {
                 let f = k as f64 / segments as f64;
                 let id = self.nodes.len();
                 let position = arc.point(arc.length() * f).extend(a.z + (b.z - a.z) * f);
-                self.nodes.push(Node { id, position, support: false });
+                self.nodes.push(Node { id, position, support: None });
                 chain.push(id);
             }
             chain.push(m.end);
@@ -131,8 +134,8 @@ struct Line {
     half: f64,
     /// Half depth measured plumb, for column ends landing on it.
     half_depth: f64,
-    /// A column whose base is on the ground, not on a beam.
-    support: bool,
+    /// A column whose base is on the ground, not on a beam, and its support.
+    support: Option<BaseSupport>,
     /// The columns a beam's ends frame into.
     framed: [Option<ElementId>; 2],
     /// The centerline arc of an arc beam (in plan).
@@ -225,6 +228,42 @@ fn project_plan(a: DVec3, b: DVec3, p: DVec2) -> (f64, f64) {
     (t, q.distance(p))
 }
 
+/// End a column's top on the axis of the highest beam framed into it there,
+/// when that axis lies within the beam's half depth (and [`REACH`]) below the
+/// top and nothing else meets the top: no column above, no beam on it. The
+/// piece of column above the beams' axes is inside the joint, and would be
+/// a short member with a free end.
+fn trim_column_tops(lines: &mut [Line], first_beam: usize) {
+    for i in 0..first_beam {
+        let top = lines[i].b;
+        let element = lines[i].element;
+        let others_meet = lines.iter().enumerate().any(|(j, l)| {
+            j != i
+                && (l.a.distance(top) < TOL || l.b.distance(top) < TOL || {
+                    let (t, d) = l.project(top);
+                    d < TOL && t > 0.0 && t < 1.0
+                })
+        });
+        if others_meet {
+            continue;
+        }
+        let highest = lines[first_beam..]
+            .iter()
+            .flat_map(|l| {
+                let ends = [(l.a, l.framed[0]), (l.b, l.framed[1])];
+                ends.into_iter().filter(move |(_, c)| *c == Some(element)).map(move |(p, _)| (p, l.half_depth))
+            })
+            .filter(|(p, half_depth)| p.z < top.z - TOL && top.z - p.z <= half_depth + REACH)
+            .map(|(p, _)| p.z)
+            .max_by(f64::total_cmp);
+        if let Some(z) = highest
+            && z > lines[i].a.z + TOL
+        {
+            lines[i].b = top.truncate().extend(z);
+        }
+    }
+}
+
 /// Build the analytical model of the structural columns and the beams.
 pub fn analytical_model(project: &Project, geom: &ModelGeometry) -> AnalyticalModel {
     let mut lines: Vec<Line> = Vec::new();
@@ -246,7 +285,7 @@ pub fn analytical_model(project: &Project, geom: &ModelGeometry) -> AnalyticalMo
                 b,
                 half: 0.0,
                 half_depth: 0.0,
-                support: true,
+                support: Some(c.base_support),
                 framed: [None; 2],
                 curve: None,
                 arc: None,
@@ -307,7 +346,7 @@ pub fn analytical_model(project: &Project, geom: &ModelGeometry) -> AnalyticalMo
                 b,
                 half: g.half,
                 half_depth,
-                support: false,
+                support: None,
                 framed: [column(g.start), column(g.end)],
                 curve: g.arc,
                 arc: None,
@@ -359,24 +398,30 @@ pub fn analytical_model(project: &Project, geom: &ModelGeometry) -> AnalyticalMo
                     lines[i].b = q;
                 } else {
                     lines[i].a = q;
-                    lines[i].support = false;
+                    lines[i].support = None;
                 }
             }
         }
     }
 
+    trim_column_tops(&mut lines, first_beam);
+
     // Shared nodes.
     let mut nodes: Vec<Node> = Vec::new();
-    let mut node_at = |p: DVec3, support: bool| -> usize {
+    let mut node_at = |p: DVec3, support: Option<BaseSupport>| -> usize {
         if let Some(n) = nodes.iter_mut().find(|n| n.position.distance(p) < TOL) {
-            n.support |= support;
+            // Two column bases on one node: the stiffer support holds.
+            n.support = match (n.support, support) {
+                (Some(BaseSupport::Fixed), _) | (_, Some(BaseSupport::Fixed)) => Some(BaseSupport::Fixed),
+                (a, b) => a.or(b),
+            };
             return n.id;
         }
         let id = nodes.len();
         nodes.push(Node { id, position: p, support });
         id
     };
-    let ends: Vec<(usize, usize)> = lines.iter().map(|l| (node_at(l.a, l.support), node_at(l.b, false))).collect();
+    let ends: Vec<(usize, usize)> = lines.iter().map(|l| (node_at(l.a, l.support), node_at(l.b, None))).collect();
 
     // Split each line at the nodes lying on it.
     let mut members = Vec::new();
@@ -452,6 +497,7 @@ mod tests {
                     height: 3.0,
                     top: WallTop::Unconnected,
                     structural: true,
+                    base_support: Default::default(),
                 };
                 add(e, Category::Column, ElementKind::Column(column));
             }
@@ -468,9 +514,10 @@ mod tests {
         let geom = ModelGeometry::build(&project);
         let m = analytical_model(&project, &geom);
         let of = |id: ElementId| m.members.iter().filter(|x| x.element == id).collect::<Vec<_>>();
-        // The 0.40 m beams' axes are at 2.80 m: the columns split there.
-        assert_eq!(of(ids[0]).len(), 2);
-        assert_eq!(of(ids[1]).len(), 2);
+        // The 0.40 m beams' axes are at 2.80 m: the columns end there, the
+        // piece above inside the joint.
+        assert_eq!(of(ids[0]).len(), 1);
+        assert_eq!(of(ids[1]).len(), 1);
         // The main beam runs from column axis to column axis, split by the secondary beam.
         let main = of(ids[2]);
         assert_eq!(main.len(), 2);
@@ -480,10 +527,10 @@ mod tests {
         // The secondary beam starts on the main beam's line.
         let (start, _) = m.line(of(ids[3])[0]).unwrap();
         assert!(start.distance(DVec3::new(2.5, 0.0, 2.8)) < 1e-9, "{start}");
-        // Column bases (the supports) and tops, two beam-column joints, the tee and the free end.
-        assert_eq!(m.nodes.len(), 8);
-        assert_eq!(m.nodes.iter().filter(|n| n.support).count(), 2);
-        assert!(m.nodes.iter().any(|n| n.position.distance(DVec3::new(0.0, 0.0, 3.0)) < 1e-9));
+        // Column bases (the supports), two beam-column joints, the tee and the free end.
+        assert_eq!(m.nodes.len(), 6);
+        assert_eq!(m.nodes.iter().filter(|n| n.support == Some(BaseSupport::Fixed)).count(), 2);
+        assert!(!m.nodes.iter().any(|n| n.position.distance(DVec3::new(0.0, 0.0, 3.0)) < 1e-9));
     }
 
     /// A quarter ring beam of radius 2.5 m about the origin between two

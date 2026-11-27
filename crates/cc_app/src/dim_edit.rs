@@ -328,6 +328,7 @@ mod tests {
             height: 3.0,
             top: cc_core::WallTop::Unconnected,
             structural: true,
+            base_support: Default::default(),
         };
         let cid = state.create_element("col".into(), level, col_ty, ElementKind::Column(col));
         state.sync();
@@ -383,6 +384,7 @@ mod tests {
             height: 3.0,
             top: cc_core::WallTop::Unconnected,
             structural: true,
+            base_support: Default::default(),
         };
         let cid = state.create_element("col".into(), level, col_ty, ElementKind::Column(col));
         state.sync();
@@ -520,6 +522,7 @@ mod tests {
             height: 3.0,
             top: cc_core::WallTop::Unconnected,
             structural: true,
+            base_support: Default::default(),
         };
         let cid = state.create_element("col".into(), level, col_ty, ElementKind::Column(col));
         state.sync();

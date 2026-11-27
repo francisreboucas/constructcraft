@@ -640,7 +640,7 @@ fn align(ctx: &Ctx, state: &mut AppState) {
                 state.message = t!("msg-pinned-skipped", "count" => 1);
                 return;
             }
-            crate::actions::run_command(state, crate::modify::align_command(id, h.truncate(), r, rp));
+            crate::actions::run_command(state, crate::modify::align_command(id, h.truncate(), r, rp, None));
             state.interaction.targets.clear();
             state.interaction.points.clear();
             state.interaction.plane_z = None;

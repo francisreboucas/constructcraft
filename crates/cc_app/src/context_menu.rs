@@ -1,7 +1,8 @@
 //! The right-click menu over a 2D or 3D view (Select tool): the commands
 //! for the selection, its category's commands (the same list as the Modify
 //! tab's highlighted groups, [`commands::contextual`]), or, with nothing
-//! selected, the view's.
+//! selected, the view's. With another tool active, the menu cancels it
+//! ([`tool`]).
 
 use std::collections::BTreeSet;
 
@@ -11,6 +12,7 @@ use egui::{Response, Ui};
 use crate::commands::{self, UiCommand};
 use crate::state::AppState;
 use crate::t;
+use crate::tools::Tool;
 
 /// A right click in `view` on `hit` (the elements under the pointer, or
 /// none). Elements not selected become the selection; then the menu opens.
@@ -36,6 +38,56 @@ pub fn show(resp: &Response, state: &mut AppState, view: ViewId) {
         Some(Choice::EditType(id)) => state.dialogs.type_editor = Some(id),
         None => {}
     }
+}
+
+/// A right click in `view` while a tool other than Select is active opens a
+/// menu to cancel the tool (as Esc does, pressed until the Select tool is
+/// back: what is being drawn is dropped, or ended as Esc ends it) or to fit
+/// the view. Sketches and the component environment keep their own clicks.
+pub fn tool(resp: &Response, state: &mut AppState, view: ViewId) {
+    if state.tool == Tool::Select || state.sketch.is_some() || state.component_env.is_some() {
+        if state.interaction.tool_menu == Some(view) {
+            state.interaction.tool_menu = None;
+        }
+        return;
+    }
+    if resp.secondary_clicked() {
+        state.interaction.tool_menu = Some(view);
+    }
+    if state.interaction.tool_menu != Some(view) {
+        return;
+    }
+    let (mut cancel, mut fit) = (false, false);
+    let open = resp.context_menu(|ui| {
+        ui.set_min_width(180.0);
+        if ui.add(egui::Button::new(t!("action-cancel")).shortcut_text("Esc")).clicked() {
+            cancel = true;
+            ui.close();
+        }
+        ui.separator();
+        fit = item(ui, state, UiCommand::ZoomFit);
+    });
+    if open.is_none() && !resp.secondary_clicked() {
+        state.interaction.tool_menu = None;
+    }
+    if cancel {
+        cancel_tool(state);
+    }
+    if fit {
+        commands::run(state, &resp.ctx, UiCommand::ZoomFit);
+    }
+}
+
+/// Press Esc until the Select tool is back (a few presses at most: a typed
+/// value, what is being drawn, the tool).
+pub fn cancel_tool(state: &mut AppState) {
+    for _ in 0..8 {
+        if state.tool == Tool::Select {
+            break;
+        }
+        crate::app::escape_step(state);
+    }
+    state.interaction.tool_menu = None;
 }
 
 /// What a click in the menu asks for.
