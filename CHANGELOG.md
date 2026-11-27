@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- PDF exports embed Inter for lines with a character outside WinAnsi that Inter can display, so Cyrillic, Greek and symbols such as `№` can be read and copied.
+- PDF exports embed Inter for lines with a character that came out as `?` and that Inter can display, so Cyrillic, Greek and symbols such as `№` and `™` can be read and copied.
 
 ## [0.15.0] - 2026-11-26
 

@@ -1,7 +1,7 @@
 //! Vector export of drawings in paper millimeters (composed sheets) to SVG
 //! and PDF. Both writers are self-contained. The PDF uses standard
-//! Helvetica and embeds Inter for lines with a character outside WinAnsi
-//! that has an Inter glyph.
+//! Helvetica and embeds Inter for lines with a character that has an Inter
+//! glyph but no byte in the writer's WinAnsi table.
 
 use crate::{Anchor, Drawing2D, Prim};
 use glam::DVec2;
@@ -162,7 +162,7 @@ const HELVETICA: [u16; 95] = [
     260, 334, 584,
 ];
 
-/// Legacy Helvetica byte for a WinAnsi character, or `None` outside WinAnsi.
+/// Helvetica byte of `c` in the writer's WinAnsi table, or `None` when it has none.
 fn win_ansi(c: char) -> Option<u8> {
     let code = c as u32;
     Some(match c {
@@ -178,10 +178,6 @@ fn win_ansi(c: char) -> Option<u8> {
         '–' => 0x96,
         '—' => 0x97,
         _ if (0x20..0x7f).contains(&code) || (0xa0..=0xff).contains(&code) => code as u8,
-        // Keep the legacy byte for WinAnsi characters the writer did not map.
-        'ƒ' | '†' | '‡' | 'ˆ' | '‰' | 'Š' | '‹' | 'Œ' | 'Ž' | '˜' | '™' | 'š' | '›' | 'œ' | 'ž' | 'Ÿ' => {
-            b'?'
-        }
         _ => return None,
     })
 }
@@ -435,10 +431,11 @@ impl PdfUnicodeFont {
         Some(Self { font: skrifa::FontRef::new(INTER).ok()?, glyphs: BTreeMap::new() })
     }
 
+    /// Whether `text` is drawn (not blank) and has a character Inter has but `win_ansi` lacks.
     fn needs_inter(&self, text: &str) -> bool {
         use skrifa::MetadataProvider;
         let map = self.font.charmap();
-        text.chars().any(|c| win_ansi(c).is_none() && map.map(c).is_some())
+        !text.trim().is_empty() && text.chars().any(|c| win_ansi(c).is_none() && map.map(c).is_some())
     }
 
     fn encode(&mut self, text: &str) -> (Vec<u8>, f64) {
@@ -915,7 +912,7 @@ endstream",
 
     #[test]
     fn pdf_keeps_greek_text_and_symbols() {
-        let labels = ["ΔU (%)", "№ 177", "Δοκιμή Αθήνα"];
+        let labels = ["ΔU (%)", "№ 177", "Δοκιμή Αθήνα", "Œuvre™ ƒ † ‡ ˆ ‰ Š ‹ Ž ˜ š › œ ž Ÿ"];
         let exported = labels.map(|label| {
             let mut drawing = Drawing2D::default();
             drawing.text(DVec2::new(10.0, 10.0), label, 3.0);
@@ -926,7 +923,7 @@ endstream",
 
     #[test]
     fn pdf_keeps_legacy_fallbacks() {
-        for (label, fallback) in [("中文", "??"), ("Œuvre™?", "?uvre??")] {
+        for (label, fallback) in [("中文", "??"), ("A😀?", "A??")] {
             let mut drawing = Drawing2D::default();
             drawing.text(DVec2::new(10.0, 10.0), label, 3.0);
             let mut expected = Drawing2D::default();
@@ -943,6 +940,49 @@ endstream",
         let (_, svg_paper) = view_on_paper(&drawing, 1, 5.0);
         let (_, pdf_paper) = view_on_pdf_paper(&drawing, 1, 5.0);
         assert!(pdf_paper.x > svg_paper.x, "SVG {svg_paper}, PDF {pdf_paper}");
+    }
+
+    /// Each code of an Inter string selects its character's glyph and advance.
+    #[test]
+    fn pdf_codes_select_inter_glyphs_and_widths() {
+        use skrifa::MetadataProvider;
+        use skrifa::instance::{LocationRef, Size};
+        let label = "Обʼєм п’ять ΔU";
+        let mut drawing = Drawing2D::default();
+        drawing.text(DVec2::new(10.0, 10.0), label, 3.0);
+        let pdf = to_pdf(&drawing, DVec2::splat(100.0));
+        let text = String::from_utf8_lossy(&pdf);
+        let after = |key: &str| text.split_once(key).unwrap().1;
+        let map_object = after("/CIDToGIDMap ").split(' ').next().unwrap();
+        let widths: Vec<&str> = after("/W [1 [").split("]]").next().unwrap().split(' ').collect();
+        let find = |from: usize, needle: &[u8]| {
+            from + pdf[from..].windows(needle.len()).position(|w| w == needle).unwrap() + needle.len()
+        };
+        let head = find(0, format!("\n{map_object} 0 obj\n<< /Length ").as_bytes());
+        let length: usize = std::str::from_utf8(&pdf[head..find(head, b" ") - 1]).unwrap().parse().unwrap();
+        let start = find(head, b"stream\n");
+        let map = &pdf[start..start + length];
+        let line = text.lines().find(|l| l.starts_with("BT ") && l.contains("/F2 ")).unwrap();
+        let hex = line.split_once('<').unwrap().1.split_once('>').unwrap().0;
+        let font = skrifa::FontRef::new(INTER).unwrap();
+        let advances = font.glyph_metrics(Size::new(1000.0), LocationRef::default());
+        assert_eq!(hex.len(), 4 * label.chars().count());
+        for (i, c) in label.chars().enumerate() {
+            let cid = usize::from_str_radix(&hex[4 * i..4 * i + 4], 16).unwrap();
+            let glyph = font.charmap().map(c).unwrap();
+            assert_eq!(u32::from(u16::from_be_bytes([map[2 * cid], map[2 * cid + 1]])), glyph.to_u32(), "{c}");
+            assert_eq!(widths[cid - 1], num(advances.advance_width(glyph).unwrap() as f64), "{c}");
+        }
+    }
+
+    /// Blank text is not drawn, so it does not widen the PDF page either.
+    #[test]
+    fn blank_text_keeps_pdf_paper() {
+        let mut drawing = Drawing2D::default();
+        drawing.text(DVec2::ZERO, "\u{2009}\u{2003}", 3.0);
+        let (_, svg_paper) = view_on_paper(&drawing, 1, 5.0);
+        let (_, pdf_paper) = view_on_pdf_paper(&drawing, 1, 5.0);
+        assert_eq!(pdf_paper, svg_paper);
     }
 
     /// A drawing with WinAnsi text uses only the standard Helvetica font.
