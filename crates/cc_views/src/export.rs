@@ -912,13 +912,25 @@ endstream",
 
     #[test]
     fn pdf_keeps_greek_text_and_symbols() {
-        let labels = ["ΔU (%)", "№ 177", "Δοκιμή Αθήνα", "Œuvre™ ƒ † ‡ ˆ ‰ Š ‹ Ž ˜ š › œ ž Ÿ"];
+        let labels = ["ΔU (%)", "№ 177", "Δοκιμή Αθήνα"];
         let exported = labels.map(|label| {
             let mut drawing = Drawing2D::default();
             drawing.text(DVec2::new(10.0, 10.0), label, 3.0);
             pdf_texts(&to_pdf(&drawing, DVec2::splat(100.0)))
         });
         assert_eq!(exported, labels.map(|label| vec![label]));
+    }
+
+    /// WinAnsi characters without a byte in the writer's table came out as `?`;
+    /// each one alone now selects Inter.
+    #[test]
+    fn pdf_keeps_unmapped_win_ansi_symbols() {
+        for c in "ƒ†‡ˆ‰Š‹ŒŽ˜™š›œžŸ".chars() {
+            let label = format!("Brand{c}");
+            let mut drawing = Drawing2D::default();
+            drawing.text(DVec2::new(10.0, 10.0), label.clone(), 3.0);
+            assert_eq!(pdf_texts(&to_pdf(&drawing, DVec2::splat(100.0))), [label], "{c}");
+        }
     }
 
     #[test]
@@ -972,6 +984,21 @@ endstream",
             let glyph = font.charmap().map(c).unwrap();
             assert_eq!(u32::from(u16::from_be_bytes([map[2 * cid], map[2 * cid + 1]])), glyph.to_u32(), "{c}");
             assert_eq!(widths[cid - 1], num(advances.advance_width(glyph).unwrap() as f64), "{c}");
+        }
+    }
+
+    /// Wide Inter text aligned on its right or center stays on the PDF page.
+    #[test]
+    fn aligned_wide_text_stays_on_pdf_paper() {
+        let label = "Ш".repeat(50);
+        let width = PdfUnicodeFont::new().unwrap().encode(&label).1 * 3.0;
+        for anchor in [Anchor::RightBottom, Anchor::CenterBottom] {
+            let mut drawing = Drawing2D::default();
+            drawing.text_at(DVec2::ZERO, label.clone(), 3.0, anchor, 0.0);
+            let (laid, paper) = view_on_pdf_paper(&drawing, 1, 5.0);
+            let Prim::Text { pos, .. } = &laid.prims[0] else { panic!("text expected") };
+            let left = pos.x - width * anchor_offsets(anchor).1;
+            assert!(left >= 0.0 && left + width <= paper.x, "{left} + {width} on {}", paper.x);
         }
     }
 
