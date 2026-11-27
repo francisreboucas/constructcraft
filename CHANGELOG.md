@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Cyrillic text in PDF exports came out as `?` (Russian and Ukrainian labels, and Cyrillic names under any interface language). Texts with Cyrillic now use an embedded Inter font and can be copied; PDFs without Cyrillic are unchanged.
+- PDF exports embed Inter for lines with a character outside WinAnsi that Inter can display, so Cyrillic, Greek and symbols such as `№` can be read and copied.
 
 ## [0.15.0] - 2026-11-26
 

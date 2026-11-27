@@ -1,6 +1,7 @@
 //! Vector export of drawings in paper millimeters (composed sheets) to SVG
 //! and PDF. Both writers are self-contained. The PDF uses standard
-//! Helvetica for most text and embeds Inter for Cyrillic text.
+//! Helvetica and embeds Inter for lines with a character outside WinAnsi
+//! that has an Inter glyph.
 
 use crate::{Anchor, Drawing2D, Prim};
 use glam::DVec2;
@@ -161,10 +162,10 @@ const HELVETICA: [u16; 95] = [
     260, 334, 584,
 ];
 
-/// Byte of `c` in WinAnsiEncoding (`?` when it has none).
-fn win_ansi(c: char) -> u8 {
+/// Legacy Helvetica byte for a WinAnsi character, or `None` outside WinAnsi.
+fn win_ansi(c: char) -> Option<u8> {
     let code = c as u32;
-    match c {
+    Some(match c {
         '€' => 0x80,
         '‚' => 0x82,
         '„' => 0x84,
@@ -177,8 +178,12 @@ fn win_ansi(c: char) -> u8 {
         '–' => 0x96,
         '—' => 0x97,
         _ if (0x20..0x7f).contains(&code) || (0xa0..=0xff).contains(&code) => code as u8,
-        _ => b'?',
-    }
+        // Keep the legacy byte for WinAnsi characters the writer did not map.
+        'ƒ' | '†' | '‡' | 'ˆ' | '‰' | 'Š' | '‹' | 'Œ' | 'Ž' | '˜' | '™' | 'š' | '›' | 'œ' | 'ž' | 'Ÿ' => {
+            b'?'
+        }
+        _ => return None,
+    })
 }
 
 /// Width of `bytes` (WinAnsi) set in Helvetica, in ems.
@@ -219,7 +224,7 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
     // Pictures as image objects: size, compressed RGB and, when not opaque, compressed alpha.
     let mut pictures: Vec<PdfPicture> = Vec::new();
     let mut content: Vec<u8> = Vec::new();
-    // Inter is embedded only when a text has Cyrillic (below), so other PDFs stay as they were.
+    // Embed Inter only if at least one line uses it.
     let mut unicode = PdfUnicodeFont::new();
     // Work in millimeters with the origin at the bottom-left corner.
     let _ = writeln!(Utf8(&mut content), "{} 0 0 {} 0 0 cm 1 J 1 j", num(PT_PER_MM), num(PT_PER_MM));
@@ -265,11 +270,11 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
                 if text.trim().is_empty() {
                     continue;
                 }
-                let (font, bytes, ems) = if let Some(font) = unicode.as_mut().filter(|_| contains_cyrillic(text)) {
+                let (font, bytes, ems) = if let Some(font) = unicode.as_mut().filter(|font| font.needs_inter(text)) {
                     let (bytes, ems) = font.encode(text);
                     ("F2", bytes, ems)
                 } else {
-                    let bytes: Vec<u8> = text.chars().map(win_ansi).collect();
+                    let bytes: Vec<u8> = text.chars().map(|c| win_ansi(c).unwrap_or(b'?')).collect();
                     ("F1", pdf_string(&bytes), helvetica_width(&bytes))
                 };
                 let (base, frac) = anchor_offsets(*anchor);
@@ -418,10 +423,6 @@ const PDF_IMAGE_SIDE: u32 = 6000;
 
 const INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
 
-fn contains_cyrillic(text: &str) -> bool {
-    text.chars().any(|c| ('\u{0400}'..='\u{052f}').contains(&c))
-}
-
 /// A composite font with a code per character. Characters sharing an Inter glyph
 /// still need distinct ToUnicode entries (for example, the two Ukrainian apostrophes).
 struct PdfUnicodeFont {
@@ -432,6 +433,12 @@ struct PdfUnicodeFont {
 impl PdfUnicodeFont {
     fn new() -> Option<Self> {
         Some(Self { font: skrifa::FontRef::new(INTER).ok()?, glyphs: BTreeMap::new() })
+    }
+
+    fn needs_inter(&self, text: &str) -> bool {
+        use skrifa::MetadataProvider;
+        let map = self.font.charmap();
+        text.chars().any(|c| win_ansi(c).is_none() && map.map(c).is_some())
     }
 
     fn encode(&mut self, text: &str) -> (Vec<u8>, f64) {
@@ -642,7 +649,7 @@ fn layout_on_paper(
                 let width = ems * size;
                 let pos = *pos * k;
                 grow(pos, DVec2::splat(width.max(*size)));
-                if let Some(font) = unicode.as_mut().filter(|_| contains_cyrillic(text)) {
+                if let Some(font) = unicode.as_mut().filter(|font| font.needs_inter(text)) {
                     let width = font.encode(text).1 * size;
                     let (base, frac) = anchor_offsets(*anchor);
                     let (sin, cos) = angle.sin_cos();
@@ -906,12 +913,44 @@ endstream",
         }
     }
 
-    /// A drawing without Cyrillic embeds no font: the PDF is the one it always was.
     #[test]
-    fn pdf_without_cyrillic_embeds_no_font() {
+    fn pdf_keeps_greek_text_and_symbols() {
+        let labels = ["ΔU (%)", "№ 177", "Δοκιμή Αθήνα"];
+        let exported = labels.map(|label| {
+            let mut drawing = Drawing2D::default();
+            drawing.text(DVec2::new(10.0, 10.0), label, 3.0);
+            pdf_texts(&to_pdf(&drawing, DVec2::splat(100.0)))
+        });
+        assert_eq!(exported, labels.map(|label| vec![label]));
+    }
+
+    #[test]
+    fn pdf_keeps_legacy_fallbacks() {
+        for (label, fallback) in [("中文", "??"), ("Œuvre™?", "?uvre??")] {
+            let mut drawing = Drawing2D::default();
+            drawing.text(DVec2::new(10.0, 10.0), label, 3.0);
+            let mut expected = Drawing2D::default();
+            expected.text(DVec2::new(10.0, 10.0), fallback, 3.0);
+            let paper = DVec2::splat(100.0);
+            assert!(to_pdf(&drawing, paper) == to_pdf(&expected, paper), "{label}");
+        }
+    }
+
+    #[test]
+    fn wide_greek_text_fits_pdf_paper() {
+        let mut drawing = Drawing2D::default();
+        drawing.text(DVec2::ZERO, "Δ".repeat(50), 3.0);
+        let (_, svg_paper) = view_on_paper(&drawing, 1, 5.0);
+        let (_, pdf_paper) = view_on_pdf_paper(&drawing, 1, 5.0);
+        assert!(pdf_paper.x > svg_paper.x, "SVG {svg_paper}, PDF {pdf_paper}");
+    }
+
+    /// A drawing with WinAnsi text uses only the standard Helvetica font.
+    #[test]
+    fn pdf_with_win_ansi_text_embeds_no_font() {
         let pdf = to_pdf(&sample(), DVec2::new(420.0, 297.0));
         let text = String::from_utf8_lossy(&pdf);
-        assert!(!text.contains("/F2") && !text.contains("Inter") && !text.contains("FontFile2"), "{text}");
+        assert!(!text.contains("/F2") && !text.contains("Inter") && !text.contains("FontFile2"));
         assert_eq!(text.matches(" 0 obj").count(), 6, "catalog, pages, page, contents, Helvetica, info");
         assert_eq!(pdf_texts(&pdf).len(), 1);
     }

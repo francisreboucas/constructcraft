@@ -1679,7 +1679,8 @@ elements in `blocks.skip`. Block names are sanitized like layer names.
 
 Vector export of drawings in paper millimeters (composed sheets) to SVG
 and PDF. Both writers are self-contained. The PDF uses standard
-Helvetica for most text and embeds Inter for Cyrillic text.
+Helvetica and embeds Inter for lines with a character outside WinAnsi
+that has an Inter glyph.
 
 **Items:** [`to_svg`](#cc_views-export-to_svg) · [`to_pdf`](#cc_views-export-to_pdf) · [`MAX_PIXELS`](#cc_views-export-max_pixels) · [`view_on_paper`](#cc_views-export-view_on_paper) · [`view_on_pdf_paper`](#cc_views-export-view_on_pdf_paper) · [`to_png`](#cc_views-export-to_png)
 
