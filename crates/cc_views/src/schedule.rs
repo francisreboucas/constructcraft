@@ -130,7 +130,7 @@ impl Value {
             Value::Volume(v) => Cell::Text(format::volume(*v)),
             Value::Weight(v) => Cell::Text(format::quantity(format::Quantity::Mass, *v, 2)),
             Value::LinearMass(v) => Cell::Text(format::quantity(format::Quantity::LinearMass, *v, 2)),
-            Value::Power(v) => Cell::Text(format!("{} VA", format::number(*v, 0))),
+            Value::Power(v) => Cell::Text(format!("{} {}", format::number(*v, 0), format::unit_symbol("VA"))),
             Value::Number(v) => Cell::Text(format::number(*v, 1)),
             Value::Missing => Cell::Text(String::new()),
         }
@@ -1454,6 +1454,16 @@ mod tests {
         let both = Table { summary: Some(Box::new(under)), ..table };
         let csv = to_csv(&both, |h| h.to_uppercase(), |c| c.raw().to_string());
         assert!(csv.ends_with("1;\r\n\r\nCAP\r\nC\r\n2\r\n"), "{csv:?}");
+    }
+
+    #[test]
+    fn power_cells_use_the_unit_notation() {
+        let n = format::number(1500.0, 0);
+        assert_eq!(Value::Power(1500.0).cell(), Cell::Text(format!("{n} VA")));
+        format::set_russian_unit_symbols(true);
+        let russian = Value::Power(1500.0).cell();
+        format::set_russian_unit_symbols(false);
+        assert_eq!(russian, Cell::Text(format!("{n} ВА")));
     }
 
     #[test]

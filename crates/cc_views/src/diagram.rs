@@ -56,7 +56,7 @@ pub fn panel_diagram(
     breaker(&mut d, at(x, -12.0), at(x, -16.0), k, id);
     d.text_at(
         at(x + 4.0, -15.0),
-        format!("{} {} A", label("diagram-main"), format::number(main, 0)),
+        format!("{} {} {}", label("diagram-main"), format::number(main, 0), format::unit_symbol("A")),
         TEXT,
         Anchor::LeftBottom,
         0.0,
@@ -77,12 +77,13 @@ pub fn panel_diagram(
             let base = at(x + 27.0 + t, y);
             d.line(base + at(-0.6, -1.0), base + at(0.6, 1.0), LineStyle::Thin, id);
         }
-        d.text_at(at(x + 12.5, y + 2.0), format!("{} A", format::number(c.breaker, 0)), 2.0, Anchor::CenterBottom, 0.0);
+        let breaker_text = format!("{} {}", format::number(c.breaker, 0), format::unit_symbol("A"));
+        d.text_at(at(x + 12.5, y + 2.0), breaker_text, 2.0, Anchor::CenterBottom, 0.0);
         let section = format!("{} {}", format::number(c.conductor, 1), format::unit_symbol("mm²"));
         d.text_at(at(x + 33.0, y + 1.0), section, 2.0, Anchor::LeftBottom, 0.0);
         let code = system.map_or(String::new(), |s| s.code.clone());
         let title = system.map_or(String::new(), |s| s.name.clone());
-        let text = format!("{code}  {title}  {} VA", format::number(c.power, 0));
+        let text = format!("{code}  {title}  {} {}", format::number(c.power, 0), format::unit_symbol("VA"));
         d.text_at(at(x + 46.0, y - 1.0), text, TEXT, Anchor::LeftBottom, 0.0);
     }
 
@@ -219,5 +220,21 @@ mod tests {
         assert!(texts.contains(&"diagram-main 16 A"), "{texts:?}");
         assert!(texts.contains(&format::number(2.5, 1).as_str()));
         assert!(texts.contains(&"diagram-total"));
+
+        // Russian symbols for amperes and volt-amperes, as for the other units.
+        format::set_russian_unit_symbols(true);
+        let d = panel_diagram(&doc.project, &geom, panel, 50, &|k| k.to_string());
+        format::set_russian_unit_symbols(false);
+        let texts: Vec<&str> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.contains(&"diagram-main 16 А"), "{texts:?}");
+        assert!(texts.contains(&"6 А"), "{texts:?}");
+        assert!(texts.iter().any(|t| t.starts_with("1  Tomadas  200") && t.ends_with(" ВА")), "{texts:?}");
     }
 }

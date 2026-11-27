@@ -471,8 +471,12 @@ pub(crate) fn symbol(
             }
             d.polyline(&tri, true, style, id);
             let text = match (device, circuit) {
-                (DeviceKind::DedicatedOutlet, Some(c)) => format!("{c} · {} VA", format::number(power, 0)),
-                (DeviceKind::DedicatedOutlet, None) => format!("{} VA", format::number(power, 0)),
+                (DeviceKind::DedicatedOutlet, Some(c)) => {
+                    format!("{c} · {} {}", format::number(power, 0), format::unit_symbol("VA"))
+                }
+                (DeviceKind::DedicatedOutlet, None) => {
+                    format!("{} {}", format::number(power, 0), format::unit_symbol("VA"))
+                }
                 (_, Some(c)) => c.to_string(),
                 (_, None) => String::new(),
             };
@@ -720,6 +724,24 @@ mod tests {
         assert_eq!(fills(0.3), 0);
         assert_eq!(fills(1.1), 1);
         assert_eq!(fills(2.0), 1);
+    }
+
+    #[test]
+    fn dedicated_outlet_power_uses_the_unit_notation() {
+        let power = |russian: bool| {
+            format::set_russian_unit_symbols(russian);
+            let mut d = Drawing2D::default();
+            let f = Frame { origin: DVec2::ZERO, angle: 0.0, mm: 0.05 };
+            symbol(&mut d, &f, DeviceKind::DedicatedOutlet, 0.3, 1500.0, Some("3"), None);
+            format::set_russian_unit_symbols(false);
+            d.prims.iter().find_map(|p| match p {
+                Prim::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+        };
+        let n = format::number(1500.0, 0);
+        assert_eq!(power(false), Some(format!("3 · {n} VA")));
+        assert_eq!(power(true), Some(format!("3 · {n} ВА")));
     }
 
     #[test]

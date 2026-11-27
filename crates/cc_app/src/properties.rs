@@ -1738,7 +1738,11 @@ fn component_services(ui: &mut Ui, state: &mut AppState, el: &Element, c: &cc_co
             cc_core::MepData::Device { device, power, ports } => {
                 readonly_row(ui, &t!("prop-device"), tr(device.key()));
                 if class == SystemClass::Circuit {
-                    readonly_row(ui, &t!("col-power"), format!("{} VA", format::number(power, 0)));
+                    readonly_row(
+                        ui,
+                        &t!("col-power"),
+                        format!("{} {}", format::number(power, 0), format::unit_symbol("VA")),
+                    );
                 }
                 if device == cc_core::DeviceKind::DataOutlet {
                     readonly_row(ui, &t!("prop-ports"), ports.to_string());

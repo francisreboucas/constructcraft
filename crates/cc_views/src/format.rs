@@ -73,6 +73,8 @@ fn russian_symbol(symbol: &str) -> &str {
         "ksi" => "кип/дюйм²",
         "l/s" => "л/с",
         "gpm" => "галлон/мин",
+        "A" => "А",
+        "VA" => "ВА",
         _ => symbol,
     }
 }
