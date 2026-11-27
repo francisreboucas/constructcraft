@@ -866,11 +866,8 @@ endstream",
     /// language, so it can be read and copied instead of turning into `?`.
     #[test]
     fn pdf_keeps_cyrillic_text() {
-        for label in [
-            "Гостиная 101 (м²)",
-            "Площа (м²): ґанок, їдальня, Євро",
-            "Room № 3 — Обʼєм (м³) · п’ять…",
-        ] {
+        for label in ["Гостиная 101 (м²)", "Площа (м²): ґанок, їдальня, Євро", "Room № 3 — Обʼєм (м³) · п’ять…"]
+        {
             let mut d = Drawing2D::default();
             d.text_at(DVec2::new(10.0, 10.0), "Room", 3.0, Anchor::Center, 0.0);
             d.text_at(DVec2::new(10.0, 20.0), label, 3.0, Anchor::Center, 0.0);
