@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Russian unit symbols such as `мм`, `м²` and `м³` in the interface, drawings and exports. Length fields accept both Latin and Cyrillic unit suffixes.
 
+### Changed
+
+- The Windows release files (`constructcraft.exe`, `ccad.exe`, the portable `.zip` and the `.msi`) are code-signed through SignPath, with a certificate from SignPath Foundation; the README has the code signing policy.
+
 ### Fixed
 
 - PDF exports embed Inter for lines with a character that came out as `?` and that Inter can display, so Cyrillic, Greek and symbols such as `№` and `™` can be read and copied.

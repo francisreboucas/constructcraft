@@ -33,7 +33,7 @@ Both Linux packages register the desktop entry and icon; the `.deb` also registe
 
 The [latest release](https://github.com/francisreboucas/constructcraft/releases/latest) page has every file, also the portable Windows `.zip`, the `.tar.gz` archives (the macOS one also has `ccad`) and a `SHA256SUMS.txt` to check them against. [Older releases](https://github.com/francisreboucas/constructcraft/releases) stay there too.
 
-**First launch.** The builds are not code-signed yet. On Windows, SmartScreen may warn about an unknown publisher: choose *More info → Run anyway*. On macOS, Gatekeeper blocks the first launch: right-click (Control-click) the app and choose *Open*, or, on macOS 15 and later, open it once and then click *Open Anyway* in *System Settings → Privacy & Security*.
+**First launch.** The Windows installer and executables are code-signed (see the [code signing policy](#code-signing-policy)); while the certificate builds its reputation, SmartScreen may still warn: choose *More info → Run anyway*. The macOS builds are not signed yet. On macOS, Gatekeeper blocks the first launch: right-click (Control-click) the app and choose *Open*, or, on macOS 15 and later, open it once and then click *Open Anyway* in *System Settings → Privacy & Security*.
 
 ## Familiar by design
 
@@ -260,6 +260,17 @@ A coffee also helps keep the work going:
 Or scan the QR code:
 
 <a href="https://www.buymeacoffee.com/francisreboucas"><img src="docs/images/buymeacoffee-qr.jpeg" alt="QR code for the Buy Me a Coffee page" width="150"></a>
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+The Windows files of each [release](https://github.com/francisreboucas/constructcraft/releases) (`constructcraft.exe`, `ccad.exe`, the portable `.zip` and the `.msi` installer) are built from this repository by the [release workflow](.github/workflows/release.yml) on GitHub-hosted runners and signed through SignPath; nothing built elsewhere is signed.
+
+- Committers and reviewers: the [members of this repository](https://github.com/francisreboucas/constructcraft/graphs/contributors); changes from outside contributors are reviewed before they are merged.
+- Approvers: [Francis Rebouças](https://github.com/francisreboucas) approves each signing request.
+
+**Privacy.** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The exceptions, all of which can be turned off or are only made on request: the update check (at most once a day, an HTTPS request to the GitHub releases API; off in *About*, or with the `CONSTRUCTCAD_NO_UPDATE_CHECK` environment variable), and the map, address search and terrain features of *Site Location*, the online component library and plugin downloads, which reach their services only when the user opens or uses them.
 
 ## Independence
 

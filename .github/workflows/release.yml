@@ -95,6 +95,61 @@ jobs:
             -d "LicenseRtf=$RUNNER_TEMP/License.rtf" \
             -o "dist/constructcraft-${GITHUB_REF_NAME}-x86_64.msi"
 
+      # Windows code signing (SignPath Foundation). One signing request takes the portable
+      # .zip and the .msi; SignPath signs constructcraft.exe and ccad.exe inside both, then
+      # the .msi itself (packaging/windows/signpath-artifact-configuration.xml), and the
+      # signed files replace the unsigned ones in dist/. Configured by the repository
+      # variables SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG and
+      # SIGNPATH_SIGNING_POLICY_SLUG (and SIGNPATH_ARTIFACT_CONFIGURATION_SLUG, when not the
+      # project's default) and the secret SIGNPATH_API_TOKEN; without them (forks) the
+      # release is built unsigned, with a warning.
+      - name: Upload unsigned Windows files
+        id: unsigned
+        if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            dist/*.zip
+            dist/*.msi
+      - name: Sign with SignPath
+        if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          # Release signing waits for a manual approval in SignPath.
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: signed
+      - name: Replace with the signed files
+        if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        run: |
+          Get-ChildItem signed
+          foreach ($f in Get-ChildItem dist -Include *.zip, *.msi -File -Recurse) {
+            $signed = Join-Path signed $f.Name
+            if (-not (Test-Path -LiteralPath $signed)) { throw "SignPath returned no $($f.Name)" }
+            Copy-Item -LiteralPath $signed -Destination $f.FullName -Force
+          }
+          $msi = Get-ChildItem dist -Filter *.msi -File | Select-Object -First 1
+          $exes = Join-Path $env:RUNNER_TEMP signed-zip
+          Get-ChildItem dist -Filter *.zip -File | ForEach-Object { Expand-Archive -LiteralPath $_.FullName -DestinationPath $exes }
+          foreach ($file in @($msi) + @(Get-ChildItem $exes -Filter *.exe -File -Recurse)) {
+            $s = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($s.Status -ne 'Valid') { throw "$($file.Name): signature $($s.Status)" }
+            "$($file.Name): $($s.SignerCertificate.Subject)"
+          }
+      - name: Unsigned Windows build
+        if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID == ''
+        shell: bash
+        run: echo "::warning::SIGNPATH_ORGANIZATION_ID is not set; the Windows files are not code-signed"
+
       # Linux: .deb (dpkg-deb) and AppImage (appimagetool), built natively on each architecture.
       - name: Linux packaging tools
         if: runner.os == 'Linux'

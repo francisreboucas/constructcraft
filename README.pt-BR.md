@@ -33,7 +33,7 @@ Os dois pacotes para Linux trazem o atalho e o ícone; o `.deb` também registra
 
 A página da [última versão](https://github.com/francisreboucas/constructcraft/releases/latest) tem todos os arquivos, também o `.zip` portátil para Windows, os arquivos compactados `.tar.gz` (o do macOS traz o `ccad`) e um `SHA256SUMS.txt` para conferi-los. As [versões anteriores](https://github.com/francisreboucas/constructcraft/releases) continuam lá.
 
-**Primeira abertura.** As compilações ainda não são assinadas. No Windows, o SmartScreen pode avisar sobre editor desconhecido: escolha *Mais informações → Executar assim mesmo*. No macOS, o Gatekeeper bloqueia a primeira abertura: clique com o botão direito (Control-clique) no aplicativo e escolha *Abrir* ou, no macOS 15 e posteriores, tente abrir uma vez e clique em *Abrir Mesmo Assim* em *Ajustes do Sistema → Privacidade e Segurança*.
+**Primeira abertura.** O instalador e os executáveis do Windows são assinados digitalmente (veja a [política de assinatura de código](#política-de-assinatura-de-código)); enquanto o certificado ganha reputação, o SmartScreen ainda pode avisar: escolha *Mais informações → Executar assim mesmo*. As compilações do macOS ainda não são assinadas. No macOS, o Gatekeeper bloqueia a primeira abertura: clique com o botão direito (Control-clique) no aplicativo e escolha *Abrir* ou, no macOS 15 e posteriores, tente abrir uma vez e clique em *Abrir Mesmo Assim* em *Ajustes do Sistema → Privacidade e Segurança*.
 
 ## Familiar por design
 
@@ -246,6 +246,17 @@ Um café também ajuda a manter o trabalho andando:
 Ou escaneie o QR code:
 
 <a href="https://www.buymeacoffee.com/francisreboucas"><img src="docs/images/buymeacoffee-qr.jpeg" alt="QR code da página do Buy Me a Coffee" width="150"></a>
+
+## Política de assinatura de código
+
+Assinatura de código gratuita fornecida por [SignPath.io](https://about.signpath.io), certificado da [SignPath Foundation](https://signpath.org).
+
+Os arquivos do Windows de cada [versão](https://github.com/francisreboucas/constructcraft/releases) (`constructcraft.exe`, `ccad.exe`, o `.zip` portátil e o instalador `.msi`) são compilados a partir deste repositório pelo [workflow de release](.github/workflows/release.yml) em runners hospedados pelo GitHub e assinados pelo SignPath; nada compilado em outro lugar é assinado.
+
+- Committers e revisores: os [membros deste repositório](https://github.com/francisreboucas/constructcraft/graphs/contributors); mudanças de colaboradores externos são revisadas antes do merge.
+- Aprovadores: [Francis Rebouças](https://github.com/francisreboucas) aprova cada pedido de assinatura.
+
+**Privacidade.** Este programa não transfere nenhuma informação para outros sistemas em rede, a menos que isso seja especificamente solicitado pelo usuário ou por quem o instala ou opera. As exceções, todas desligáveis ou feitas só a pedido: a verificação de atualizações (no máximo uma vez por dia, uma requisição HTTPS à API de releases do GitHub; desligue em *Sobre* ou com a variável de ambiente `CONSTRUCTCAD_NO_UPDATE_CHECK`), e o mapa, a busca de endereço e o terreno da *Localização do terreno*, a biblioteca de componentes online e o download de plugins, que acessam seus serviços só quando o usuário os abre ou usa.
 
 ## Independência
 

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration of the Windows release files (paste it into the
+  project's artifact configuration in SignPath; the release workflow submits the
+  GitHub artifact that holds them).
+
+  The artifact is a zip with two files: the portable
+  constructcraft-<tag>-x86_64-pc-windows-msvc.zip (a folder with constructcraft.exe
+  and ccad.exe) and constructcraft-<tag>-x86_64.msi. Both executables are signed in
+  each, and then the .msi itself.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <zip-file path="constructcraft-*-x86_64-pc-windows-msvc.zip">
+      <pe-file path="*/constructcraft.exe">
+        <authenticode-sign/>
+      </pe-file>
+      <pe-file path="*/ccad.exe">
+        <authenticode-sign/>
+      </pe-file>
+    </zip-file>
+    <msi-file path="constructcraft-*-x86_64.msi">
+      <pe-file path="**/constructcraft.exe">
+        <authenticode-sign/>
+      </pe-file>
+      <pe-file path="**/ccad.exe">
+        <authenticode-sign/>
+      </pe-file>
+      <authenticode-sign/>
+    </msi-file>
+  </zip-file>
+</artifact-configuration>
