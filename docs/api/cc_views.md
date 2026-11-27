@@ -26,7 +26,7 @@ computes tables.
 | [`cc_views::drawing`](#mod-cc_views-drawing) | 9 |  |
 | [`cc_views::drawing_index`](#mod-cc_views-drawing_index) | 1 | Lookups over a drawing's primitives: the primitives of each element and a grid of the pickable ones, so picking under the pointer does not walk every primitive of a large drawing (an imported DXF holds 100 000). |
 | [`cc_views::dxf`](#mod-cc_views-dxf) | 9 | DXF export of drawings, for exchanging 2D views with other CAD programs. |
-| [`cc_views::export`](#mod-cc_views-export) | 5 | Vector export of drawings in paper millimeters (composed sheets) to SVG and PDF. |
+| [`cc_views::export`](#mod-cc_views-export) | 6 | Vector export of drawings in paper millimeters (composed sheets) to SVG and PDF. |
 | [`cc_views::fonts`](#mod-cc_views-fonts) | 4 | Fallback fonts for the scripts Inter lacks (Chinese, Japanese, Korean, Lao), found among the fonts operating systems usually ship and read once. |
 | [`cc_views::format`](#mod-cc_views-format) | 53 | Number formatting for drawings, schedules and the interface. |
 | [`cc_views::graphics`](#mod-cc_views-graphics) | 5 | View graphics applied to drawings: hidden categories, filters and elements leave the drawing, as do elements the view's phase and phase filter leave out, and the resolved overrides change the pens of lines and the colors and patterns of fills (see `cc_core::graphics` and `cc_core::phase`). |
@@ -1681,7 +1681,7 @@ Vector export of drawings in paper millimeters (composed sheets) to SVG
 and PDF. Both writers are self-contained. The PDF uses standard
 Helvetica for most text and embeds Inter for Cyrillic text.
 
-**Items:** [`to_svg`](#cc_views-export-to_svg) · [`to_pdf`](#cc_views-export-to_pdf) · [`MAX_PIXELS`](#cc_views-export-max_pixels) · [`view_on_paper`](#cc_views-export-view_on_paper) · [`to_png`](#cc_views-export-to_png)
+**Items:** [`to_svg`](#cc_views-export-to_svg) · [`to_pdf`](#cc_views-export-to_pdf) · [`MAX_PIXELS`](#cc_views-export-max_pixels) · [`view_on_paper`](#cc_views-export-view_on_paper) · [`view_on_pdf_paper`](#cc_views-export-view_on_pdf_paper) · [`to_png`](#cc_views-export-to_png)
 
 <a id="cc_views-export-to_svg"></a>
 
@@ -1725,6 +1725,16 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
 A view's drawing (meters, drawn at 1:`scale`; text sizes in paper
 millimeters) laid out on paper: the drawing in millimeters with `margin`
 around it, and the paper size.
+
+<a id="cc_views-export-view_on_pdf_paper"></a>
+
+### fn `view_on_pdf_paper`
+
+```rust
+pub fn view_on_pdf_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D, DVec2)
+```
+
+Lay out a standalone PDF view, including the extents of embedded text.
 
 <a id="cc_views-export-to_png"></a>
 
