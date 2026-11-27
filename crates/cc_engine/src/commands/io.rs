@@ -357,6 +357,10 @@ const VIEW_MARGIN: f64 = 5.0;
 impl ViewExport {
     /// The view drawn on paper (millimeters) and the paper size.
     pub fn page(s: &mut Session, view: Ref) -> Result<(cc_views::Drawing2D, glam::DVec2)> {
+        Self::page_for(s, view, false)
+    }
+
+    fn page_for(s: &mut Session, view: Ref, pdf: bool) -> Result<(cc_views::Drawing2D, glam::DVec2)> {
         let id = refs::view(s.project(), &view)?;
         let kind = s.project().view(id).map(|v| (v.kind.clone(), v.scale));
         match kind {
@@ -367,7 +371,8 @@ impl ViewExport {
             Some((_, scale)) => {
                 let drawing =
                     s.printed_drawing(id).ok_or_else(|| EngineError::invalid("the view has no drawing to export"))?;
-                Ok(cc_views::export::view_on_paper(&drawing, scale, VIEW_MARGIN))
+                let layout = if pdf { cc_views::export::view_on_pdf_paper } else { cc_views::export::view_on_paper };
+                Ok(layout(&drawing, scale, VIEW_MARGIN))
             }
             None => Err(EngineError::not_found("view")),
         }
@@ -396,7 +401,7 @@ impl Command for ViewExport {
             }
             return Ok(out);
         }
-        let (drawing, paper) = Self::page(s, self.view)?;
+        let (drawing, paper) = Self::page_for(s, self.view, format == "pdf")?;
         let mut out = json!({ "path": self.path, "format": format, "paper_mm": [paper.x, paper.y] });
         let bytes = match format.as_str() {
             "png" => {

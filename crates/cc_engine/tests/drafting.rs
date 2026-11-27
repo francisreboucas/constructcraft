@@ -130,6 +130,21 @@ fn drafting_views_show_only_what_is_drawn_in_them() {
     }
 }
 
+#[test]
+fn a_wide_cyrillic_note_fits_its_pdf_page() {
+    let mut s = Session::default();
+    let view = run(&mut s, "view_create", json!({"kind": "drafting"}))["id"].clone();
+    run(&mut s, "text_create", json!({"view": view, "position": [0, 0], "text": "Ш".repeat(50)}));
+    let svg = run(&mut s, "view_export", json!({"view": view, "path": scratch("wide-note.svg")}));
+    let pdf = run(&mut s, "view_export", json!({"view": view, "path": scratch("wide-note.pdf")}));
+    let svg_width = svg["paper_mm"][0].as_f64().unwrap();
+    let pdf_width = pdf["paper_mm"][0].as_f64().unwrap();
+    assert!((svg_width - 160.0).abs() < 1e-6, "{svg}");
+    // The default 2.5 mm note has 50 advances of 1961/2048 em in Inter.
+    let note_width = 50.0 * 2.5 * 1961.0 / 2048.0;
+    assert!(pdf_width >= 85.0 + note_width, "{pdf}");
+}
+
 /// An empty drafting view still exports and sits on a sheet.
 #[test]
 fn empty_drafting_views_export() {

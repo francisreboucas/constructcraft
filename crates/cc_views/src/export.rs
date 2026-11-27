@@ -265,9 +265,7 @@ pub fn to_pdf(drawing: &Drawing2D, paper: DVec2) -> Vec<u8> {
                 if text.trim().is_empty() {
                     continue;
                 }
-                let (font, bytes, ems) = if let Some(font) =
-                    unicode.as_mut().filter(|_| text.chars().any(|c| ('\u{0400}'..='\u{052f}').contains(&c)))
-                {
+                let (font, bytes, ems) = if let Some(font) = unicode.as_mut().filter(|_| contains_cyrillic(text)) {
                     let (bytes, ems) = font.encode(text);
                     ("F2", bytes, ems)
                 } else {
@@ -419,6 +417,10 @@ type PdfPicture = (u32, u32, Vec<u8>, Option<Vec<u8>>);
 const PDF_IMAGE_SIDE: u32 = 6000;
 
 const INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+
+fn contains_cyrillic(text: &str) -> bool {
+    text.chars().any(|c| ('\u{0400}'..='\u{052f}').contains(&c))
+}
 
 /// A composite font with a code per character. Characters sharing an Inter glyph
 /// still need distinct ToUnicode entries (for example, the two Ukrainian apostrophes).
@@ -603,6 +605,20 @@ fn pick_glyph(charmaps: &[skrifa::charmap::Charmap], c: char) -> (usize, skrifa:
 /// millimeters) laid out on paper: the drawing in millimeters with `margin`
 /// around it, and the paper size.
 pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D, DVec2) {
+    layout_on_paper(drawing, scale, margin, None)
+}
+
+/// Lay out a standalone PDF view, including the extents of embedded text.
+pub fn view_on_pdf_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D, DVec2) {
+    layout_on_paper(drawing, scale, margin, PdfUnicodeFont::new())
+}
+
+fn layout_on_paper(
+    drawing: &Drawing2D,
+    scale: u32,
+    margin: f64,
+    mut unicode: Option<PdfUnicodeFont>,
+) -> (Drawing2D, DVec2) {
     let k = 1000.0 / scale.max(1) as f64;
     let mut lo = DVec2::splat(f64::INFINITY);
     let mut hi = DVec2::splat(f64::NEG_INFINITY);
@@ -620,11 +636,22 @@ pub fn view_on_paper(drawing: &Drawing2D, scale: u32, margin: f64) -> (Drawing2D
             }
             Prim::Fill { pts, .. } => pts.iter().for_each(|p| grow(*p * k, DVec2::ZERO)),
             // Text runs off its anchor: a generous box (any rotation).
-            Prim::Text { pos, text, size, .. } => {
+            Prim::Text { pos, text, size, anchor, angle, .. } => {
                 // Ideographs and other wide characters take a full em.
                 let ems: f64 = text.chars().map(|c| if c >= '\u{1100}' { 1.0 } else { 0.6 }).sum();
                 let width = ems * size;
-                grow(*pos * k, DVec2::splat(width.max(*size)));
+                let pos = *pos * k;
+                grow(pos, DVec2::splat(width.max(*size)));
+                if let Some(font) = unicode.as_mut().filter(|_| contains_cyrillic(text)) {
+                    let width = font.encode(text).1 * size;
+                    let (base, frac) = anchor_offsets(*anchor);
+                    let (sin, cos) = angle.sin_cos();
+                    let along = DVec2::new(cos, sin);
+                    let origin = pos - along.perp() * (base * size) - along * (frac * width);
+                    let pad = DVec2::splat(*size);
+                    grow(origin, pad);
+                    grow(origin + along * width, pad);
+                }
             }
             Prim::Image { origin, u, v, .. } => {
                 for p in Prim::image_corners(*origin, *u, *v) {
