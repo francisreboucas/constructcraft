@@ -684,11 +684,7 @@ fn value_cached(project: &Project, geom: &ModelGeometry, e: &Element, field: Sch
         F::PlateMass => geom.connections.get(&e.id).map_or(Value::Missing, |g| Value::Weight(g.plate_mass())),
         F::BoltCount => geom.connections.get(&e.id).map_or(Value::Missing, |g| Value::Count(g.bolt_count())),
         F::BoltDiameter => geom.connections.get(&e.id).map_or(Value::Missing, |g| {
-            let text = if format::imperial() {
-                format!("Ø {}", format::inch_size(g.bolt_diameter))
-            } else {
-                format!("Ø {} mm", format::number(g.bolt_diameter * 1000.0, 0))
-            };
+            let text = format!("Ø {}", format::size(g.bolt_diameter, format::MetricSize::Mm(0)));
             Value::Measured(text, g.bolt_diameter)
         }),
         F::Number => match &e.kind {

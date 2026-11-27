@@ -413,7 +413,7 @@ pub fn bending(
 }
 
 fn weight_text(w: f64) -> String {
-    format!("{} kg", format::number(w, 2))
+    format!("{} {}", format::number(w, 2), format::unit_symbol("kg"))
 }
 
 /// The bending schedule as a table (see [`bending`]): a row per mark (under

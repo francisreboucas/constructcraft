@@ -66,7 +66,7 @@ fn number(v: &Value, decimals: usize) -> String {
 pub fn meters_text(v: &Value, decimals: usize) -> String {
     match v.as_f64() {
         Some(m) if cc_views::format::imperial() => cc_views::format::length(m),
-        _ => format!("{} m", number(v, decimals)),
+        _ => format!("{} {}", number(v, decimals), cc_views::format::unit_symbol("m")),
     }
 }
 

@@ -1227,7 +1227,7 @@ fn profile_size(project: &cc_core::Project, id: ProfileId) -> Option<String> {
         let v = v * 1000.0;
         format::number(v, if (v - v.round()).abs() < 0.05 { 0 } else { 1 })
     };
-    Some(format!("{} × {} mm", mm(hi.y - lo.y), mm(hi.x - lo.x)))
+    Some(format!("{} × {} {}", mm(hi.y - lo.y), mm(hi.x - lo.x), cc_views::format::unit_symbol("mm")))
 }
 
 /// The project's profiles grouped by material with a search box; returns

@@ -1481,7 +1481,7 @@ pub fn decimal_paper_drag(value: &mut f64) -> DragValue<'_> {
 fn paper_drag_with(value: &mut f64, show: fn(&cc_core::Units, bool, f64) -> String) -> DragValue<'_> {
     let (units, comma) = format::current();
     if units.system() == cc_core::MeasurementSystem::Metric {
-        return number_drag(value).suffix(" mm");
+        return number_drag(value).suffix(format!(" {}", format::unit_symbol("mm")));
     }
     let parse_units = units.clone();
     number_drag(value)

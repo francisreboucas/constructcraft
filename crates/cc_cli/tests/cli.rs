@@ -92,6 +92,33 @@ fn scripts_refer_to_earlier_steps_and_the_given_level() {
 }
 
 #[test]
+fn calculated_schedule_units_follow_the_cli_language() {
+    let script = r#"
+{"command":"column_create","args":{"position":[0,0]}}
+{"command":"connections_create","args":{"kind":"base_plate","members":[{"$step":1}]}}
+{"command":"view_create","args":{"kind":"schedule","category":"connection","name":"Connections"}}
+{"command":"schedule_table","args":{"view":"Connections"}}
+{"command":"beam_create","args":{"start":[0,0],"end":[5,0],"top_offset":3.0}}
+{"command":"rebar_typical"}
+{"command":"bending_schedule_create","args":{"name":"Bending"}}
+{"command":"schedule_table","args":{"view":"Bending"}}
+"#;
+    for (lang, bolt, weight) in [("en", "Ø 20 mm", " kg"), ("ru", "Ø 20 мм", " кг")] {
+        let (code, out, err) = ccad(&["--lang", lang, "script", "-"], script);
+        assert_eq!(code, 0, "{err}");
+        let connection = out[3]["result"]["rows"][0]["cells"].as_array().unwrap();
+        assert!(connection.contains(&json!(bolt)), "{lang}: {connection:?}");
+        let bars = out[7]["result"]["rows"].as_array().unwrap();
+        assert!(
+            bars.iter().any(|row| {
+                row["cells"].as_array().unwrap().iter().any(|cell| cell.as_str().is_some_and(|s| s.ends_with(weight)))
+            }),
+            "{lang}: {bars:?}"
+        );
+    }
+}
+
+#[test]
 fn catalog_and_schemas() {
     let (code, list, _) = ccad(&["commands"], "");
     assert_eq!(code, 0);

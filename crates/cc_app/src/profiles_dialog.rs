@@ -566,7 +566,7 @@ fn catalog_details(ui: &mut Ui, _state: &mut AppState, d: &mut ProfilesDialog) {
         for (param, value) in ordered_params(&detail) {
             let degrees = param == "angle" || param == "sweep";
             let shown = if degrees { value } else { value * 1000.0 };
-            let suffix = if degrees { "°" } else { " mm" };
+            let suffix = if degrees { "°".to_owned() } else { format!(" {}", cc_views::format::unit_symbol("mm")) };
             let tip = crate::i18n::try_tr(&param_key(&param));
             table::row_tip(ui, &param, tip.as_deref(), |ui| {
                 ui.label(format!("{} {suffix}", number(shown)));
@@ -767,7 +767,8 @@ fn details(ui: &mut Ui, state: &mut AppState, d: &mut ProfilesDialog) {
                 if inches {
                     return ui.add(crate::properties::size_drag(&mut shown).range(0.0..=f64::MAX));
                 }
-                let suffix = if degrees { "°" } else { " mm" };
+                let suffix =
+                    if degrees { "°".to_owned() } else { format!(" {}", cc_views::format::unit_symbol("mm")) };
                 ui.add(egui::DragValue::new(&mut shown).speed(0.5).range(0.0..=f64::MAX).max_decimals(2).suffix(suffix))
             });
             if r.changed() {
@@ -882,7 +883,11 @@ fn preview(ui: &mut Ui, detail: &Value) {
     }
     let font = egui::FontId::proportional(11.0);
     let mm = |v: f64| {
-        if cc_views::format::imperial() { cc_views::format::inch_size(v) } else { format!("{} mm", number(v * 1000.0)) }
+        if cc_views::format::imperial() {
+            cc_views::format::inch_size(v)
+        } else {
+            format!("{} {}", number(v * 1000.0), cc_views::format::unit_symbol("mm"))
+        }
     };
     let bottom = Pos2::new(rect.center().x, rect.bottom() - 4.0);
     painter.text(bottom, egui::Align2::CENTER_BOTTOM, format!("bf = {}", mm(size.x)), font.clone(), palette.text_muted);

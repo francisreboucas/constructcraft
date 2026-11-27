@@ -88,7 +88,11 @@ fn color32(c: [u8; 3]) -> egui::Color32 {
 /// A paper weight as the project reads it: the number alone in metric
 /// projects (with "mm"), with the inch mark in imperial ones.
 fn weight_text(mm: f64) -> String {
-    if cc_views::format::imperial() { cc_views::format::paper_weight(mm) } else { format!("{mm:.2} mm") }
+    if cc_views::format::imperial() {
+        cc_views::format::paper_weight(mm)
+    } else {
+        format!("{mm:.2} {}", cc_views::format::unit_symbol("mm"))
+    }
 }
 
 /// The project's own styles, each a row: its line as it prints, its name,
